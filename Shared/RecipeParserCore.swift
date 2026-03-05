@@ -241,7 +241,7 @@ struct RecipeParserCore {
 
         return ParsedRecipe(
             title: stripHTML(title),
-            ingredients: ingredients.map { stripHTML($0) },
+            ingredients: ingredients.map { stripLeadingBullets(stripHTML($0)) },
             directions: directions.map { stripHTML($0) },
             sourceURL: sourceURL,
             imageURL: imageURL,
@@ -334,7 +334,7 @@ struct RecipeParserCore {
             let matches = regex.matches(in: listHTML, range: range)
             for match in matches {
                 if let contentRange = Range(match.range(at: 1), in: listHTML) {
-                    let text = stripHTML(String(listHTML[contentRange]))
+                    let text = stripLeadingBullets(stripHTML(String(listHTML[contentRange])))
                     if !text.isEmpty {
                         items.append(text)
                     }
@@ -461,6 +461,19 @@ struct RecipeParserCore {
     }
 
     // MARK: - HTML Helpers
+
+    /// Removes leading bullet points, decorative symbols, and list markers from ingredient text.
+    /// Some sites embed characters like •, ■, -, * at the start of ingredient strings.
+    static func stripLeadingBullets(_ string: String) -> String {
+        // Unicode bullet/decorator characters and common ASCII list markers
+        let bulletCharacters = CharacterSet(charactersIn: "•·▪▫■□▸▹►▻◆◇○●◉➤➢➣➥➦–—-*")
+        var result = string
+        while let first = result.unicodeScalars.first, bulletCharacters.contains(first) {
+            result = String(result.dropFirst())
+            result = result.trimmingCharacters(in: .whitespaces)
+        }
+        return result
+    }
 
     static func stripHTML(_ string: String) -> String {
         var result = string
