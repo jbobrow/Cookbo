@@ -334,7 +334,20 @@ struct RecipeParserCore {
             let matches = regex.matches(in: listHTML, range: range)
             for match in matches {
                 if let contentRange = Range(match.range(at: 1), in: listHTML) {
-                    let text = stripLeadingBullets(stripHTML(String(listHTML[contentRange])))
+                    var content = String(listHTML[contentRange])
+                    // Remove screen-reader-only spans (e.g. WPRM checkbox symbols like &#x25a2;)
+                    content = content.replacingOccurrences(
+                        of: #"<span[^>]*(?:sr-only|screen-reader-text)[^>]*>[\s\S]*?</span>"#,
+                        with: "",
+                        options: .regularExpression
+                    )
+                    // Remove checkbox inputs and their labels entirely
+                    content = content.replacingOccurrences(
+                        of: #"<(?:input|label)[^>]*/?>|<label[^>]*>[\s\S]*?</label>"#,
+                        with: "",
+                        options: .regularExpression
+                    )
+                    let text = stripLeadingBullets(stripHTML(content))
                     if !text.isEmpty {
                         items.append(text)
                     }
@@ -466,7 +479,7 @@ struct RecipeParserCore {
     /// Some sites embed characters like •, ■, -, * at the start of ingredient strings.
     static func stripLeadingBullets(_ string: String) -> String {
         // Unicode bullet/decorator characters and common ASCII list markers
-        let bulletCharacters = CharacterSet(charactersIn: "•·▪▫■□▸▹►▻◆◇○●◉➤➢➣➥➦–—-*")
+        let bulletCharacters = CharacterSet(charactersIn: "•·▪▫■□▸▹►▻◆◇○●◉➤➢➣➥➦–—-*☐☑☒◻◼🔲🔳")
         var result = string
         while let first = result.unicodeScalars.first, bulletCharacters.contains(first) {
             result = String(result.dropFirst())
