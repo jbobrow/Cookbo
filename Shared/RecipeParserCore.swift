@@ -110,6 +110,36 @@ struct RecipeParserCore {
 
     // MARK: - JSON-LD Parsing (Schema.org Recipe)
 
+    /// Recursively collect all Recipe-typed dicts from a JSON-LD value.
+    /// Handles @graph arrays, ItemList.itemListElement[].item nesting, and plain arrays.
+    private static func collectRecipeCandidates(from value: Any) -> [[String: Any]] {
+        var results: [[String: Any]] = []
+        if let dict = value as? [String: Any] {
+            let type_ = dict["@type"]
+            let isRecipe: Bool
+            if let s = type_ as? String { isRecipe = s == "Recipe" }
+            else if let a = type_ as? [String] { isRecipe = a.contains("Recipe") }
+            else { isRecipe = false }
+            if isRecipe { results.append(dict) }
+            // Recurse into @graph
+            if let graph = dict["@graph"] as? [Any] {
+                for item in graph { results += collectRecipeCandidates(from: item) }
+            }
+            // Recurse into ItemList / ListItem nested items
+            if let elems = dict["itemListElement"] as? [Any] {
+                for elem in elems {
+                    if let elemDict = elem as? [String: Any] {
+                        let nested = elemDict["item"] ?? elem
+                        results += collectRecipeCandidates(from: nested)
+                    }
+                }
+            }
+        } else if let array = value as? [Any] {
+            for item in array { results += collectRecipeCandidates(from: item) }
+        }
+        return results
+    }
+
     static func parseJSONLD(html: String, sourceURL: String) -> ParsedRecipe? {
         let pattern = #"<script[^>]*type\s*=\s*["']?application/ld\+json["']?[^>]*>([\s\S]*?)</script>"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
@@ -119,44 +149,23 @@ struct RecipeParserCore {
         let range = NSRange(html.startIndex..., in: html)
         let matches = regex.matches(in: html, range: range)
 
+        var best: ParsedRecipe? = nil
         for match in matches {
             guard let jsonRange = Range(match.range(at: 1), in: html) else { continue }
             let jsonString = String(html[jsonRange])
             guard let jsonData = jsonString.data(using: .utf8) else { continue }
             guard let json = try? JSONSerialization.jsonObject(with: jsonData) else { continue }
 
-            if let dict = json as? [String: Any] {
-                if let recipe = extractRecipe(from: dict, sourceURL: sourceURL) {
-                    return recipe
-                }
-                // Cast as [Any] so mixed arrays (dicts + other types) don't fail
-                if let graph = dict["@graph"] as? [Any] {
-                    for item in graph {
-                        if let itemDict = item as? [String: Any],
-                           let recipe = extractRecipe(from: itemDict, sourceURL: sourceURL) {
-                            return recipe
-                        }
-                    }
-                }
-            } else if let array = json as? [Any] {
-                for item in array {
-                    guard let itemDict = item as? [String: Any] else { continue }
-                    if let recipe = extractRecipe(from: itemDict, sourceURL: sourceURL) {
-                        return recipe
-                    }
-                    if let graph = itemDict["@graph"] as? [Any] {
-                        for graphItem in graph {
-                            if let graphDict = graphItem as? [String: Any],
-                               let recipe = extractRecipe(from: graphDict, sourceURL: sourceURL) {
-                                return recipe
-                            }
-                        }
-                    }
+            for candidateDict in collectRecipeCandidates(from: json) {
+                guard let recipe = extractRecipe(from: candidateDict, sourceURL: sourceURL) else { continue }
+                // Prefer the candidate with the most directions (list beats string summary)
+                if best == nil || recipe.directions.count > best!.directions.count {
+                    best = recipe
                 }
             }
         }
 
-        return nil
+        return best
     }
 
     private static func extractRecipe(from dict: [String: Any], sourceURL: String) -> ParsedRecipe? {
@@ -179,33 +188,39 @@ struct RecipeParserCore {
         if let instructions = dict["recipeInstructions"] {
             if let steps = instructions as? [String] {
                 directions = steps
-            } else if let steps = instructions as? [[String: Any]] {
+            } else if let steps = instructions as? [Any] {
+                // Use [Any] instead of [[String: Any]] so mixed arrays (strings + dicts) don't fail the cast
                 for step in steps {
-                    let stepType = step["@type"] as? String ?? ""
+                    if let stepString = step as? String {
+                        directions.append(stepString)
+                    } else if let stepDict = step as? [String: Any] {
+                        let stepType = stepDict["@type"] as? String ?? ""
 
-                    if stepType == "HowToSection" {
-                        // HowToSection contains nested HowToStep items — flatten them
-                        if let items = step["itemListElement"] as? [[String: Any]] {
+                        if stepType == "HowToSection" {
+                            // HowToSection contains nested HowToStep items — flatten them
+                            let items = (stepDict["itemListElement"] as? [Any]) ?? []
                             for item in items {
-                                if let text = item["text"] as? String, !text.isEmpty {
+                                guard let itemDict = item as? [String: Any] else { continue }
+                                if let text = itemDict["text"] as? String, !text.isEmpty {
                                     directions.append(text)
-                                } else if let name = item["name"] as? String, !name.isEmpty {
+                                } else if let name = itemDict["name"] as? String, !name.isEmpty {
                                     directions.append(name)
                                 }
                             }
-                        }
-                    } else if let text = step["text"] as? String, !text.isEmpty {
-                        directions.append(text)
-                    } else if let items = step["itemListElement"] as? [[String: Any]] {
-                        for item in items {
-                            if let text = item["text"] as? String, !text.isEmpty {
-                                directions.append(text)
-                            } else if let name = item["name"] as? String, !name.isEmpty {
-                                directions.append(name)
+                        } else if let text = stepDict["text"] as? String, !text.isEmpty {
+                            directions.append(text)
+                        } else if let items = stepDict["itemListElement"] as? [Any] {
+                            for item in items {
+                                guard let itemDict = item as? [String: Any] else { continue }
+                                if let text = itemDict["text"] as? String, !text.isEmpty {
+                                    directions.append(text)
+                                } else if let name = itemDict["name"] as? String, !name.isEmpty {
+                                    directions.append(name)
+                                }
                             }
+                        } else if let name = stepDict["name"] as? String, !name.isEmpty {
+                            directions.append(name)
                         }
-                    } else if let name = step["name"] as? String, !name.isEmpty {
-                        directions.append(name)
                     }
                 }
             } else if let instructionString = instructions as? String {
@@ -293,7 +308,9 @@ struct RecipeParserCore {
         if !groups.isEmpty { return groups }
 
         // Strategy 3: Generic pattern — header tags (h2-h4) containing "for the" followed by <ul>
-        let forThePattern = #"<h[2-4][^>]*>([\s\S]*?)</h[2-4]>\s*<ul[^>]*>([\s\S]*?)</ul>"#
+        // Use [^<]* for header name to prevent lazy [\s\S]*? from crossing adjacent heading tags
+        // via backtracking (e.g. consuming <h3>Title</h3><h4>Name as a single match).
+        let forThePattern = #"<h[2-4][^>]*>([^<]*)</h[2-4]>\s*<ul[^>]*>([\s\S]*?)</ul>"#
         if let regex = try? NSRegularExpression(pattern: forThePattern, options: .caseInsensitive) {
             let range = NSRange(html.startIndex..., in: html)
             let matches = regex.matches(in: html, range: range)
@@ -306,6 +323,50 @@ struct RecipeParserCore {
                 let items = extractListItems(from: String(html[listRange]))
                 if !items.isEmpty {
                     groups.append(ParsedIngredientGroup(name: name, ingredients: items))
+                }
+            }
+        }
+        if !groups.isEmpty { return groups }
+
+        // Strategy 4: Tasty Recipes plugin — h3/h4 headers + <ul> inside tasty-recipes-ingredients container
+        // Matches div[class*="tasty-recipes-ingredients"], then extracts header+ul pairs within it
+        let tastyIngContainerPattern = #"<div[^>]*class\s*=\s*["'][^"']*tasty-recipes-ingredients[^"']*["'][^>]*>([\s\S]*?)</div>\s*</div>"#
+        if let regex = try? NSRegularExpression(pattern: tastyIngContainerPattern, options: .caseInsensitive) {
+            let range = NSRange(html.startIndex..., in: html)
+            if let match = regex.firstMatch(in: html, range: range),
+               let containerRange = Range(match.range(at: 1), in: html) {
+                let containerHTML = String(html[containerRange])
+                // Extract header + ul pairs within the container.
+                // Use [^<]* for header name to avoid crossing adjacent heading tag boundaries.
+                let groupPattern = #"<h[2-6][^>]*>([^<]*)</h[2-6]>\s*<ul[^>]*>([\s\S]*?)</ul>"#
+                if let groupRegex = try? NSRegularExpression(pattern: groupPattern, options: .caseInsensitive) {
+                    let containerRange2 = NSRange(containerHTML.startIndex..., in: containerHTML)
+                    let groupMatches = groupRegex.matches(in: containerHTML, range: containerRange2)
+                    for gm in groupMatches {
+                        guard let nameRange2 = Range(gm.range(at: 1), in: containerHTML),
+                              let listRange2 = Range(gm.range(at: 2), in: containerHTML) else { continue }
+                        let name = stripHTML(String(containerHTML[nameRange2]))
+                        let items = extractListItems(from: String(containerHTML[listRange2]))
+                        if !items.isEmpty {
+                            groups.append(ParsedIngredientGroup(name: name, ingredients: items))
+                        }
+                    }
+                }
+                // If no groups found with headers, treat entire container as single group
+                if groups.isEmpty {
+                    let ulPattern = #"<ul[^>]*>([\s\S]*?)</ul>"#
+                    if let ulRegex = try? NSRegularExpression(pattern: ulPattern, options: .caseInsensitive) {
+                        let ulMatches = ulRegex.matches(in: containerHTML, range: NSRange(containerHTML.startIndex..., in: containerHTML))
+                        var allItems: [String] = []
+                        for um in ulMatches {
+                            if let listRange3 = Range(um.range(at: 1), in: containerHTML) {
+                                allItems += extractListItems(from: String(containerHTML[listRange3]))
+                            }
+                        }
+                        if !allItems.isEmpty {
+                            groups.append(ParsedIngredientGroup(name: "", ingredients: allItems))
+                        }
+                    }
                 }
             }
         }
@@ -388,6 +449,18 @@ struct RecipeParserCore {
     // MARK: - HTML Directions Fallback
 
     static func parseDirectionsFromHTML(html: String) -> [String] {
+        // Strategy 0: Tasty Recipes plugin — <ol> directly inside div[class*="tasty-recipes-instructions"]
+        // Uses firstMatch to avoid duplicate steps from nested containers
+        let tastyInstructionsPattern = #"class\s*=\s*["'][^"']*tasty-recipes-instructions[^"']*["'][^>]*>[\s\S]{0,500}?<ol[^>]*>([\s\S]*?)</ol>"#
+        if let regex = try? NSRegularExpression(pattern: tastyInstructionsPattern, options: .caseInsensitive) {
+            let range = NSRange(html.startIndex..., in: html)
+            if let match = regex.firstMatch(in: html, range: range),
+               let contentRange = Range(match.range(at: 1), in: html) {
+                let items = extractListItems(from: String(html[contentRange])).filter { $0.count > 10 }
+                if !items.isEmpty { return items }
+            }
+        }
+
         // Strategy 1: Find <li> elements inside an itemprop="recipeInstructions" container (Microdata)
         let itempropPattern = #"itemprop\s*=\s*["']recipeInstructions["'][^>]*>([\s\S]*?)</(?:ol|ul|div|section)>"#
         if let directions = extractStepsFromHTMLBlock(html: html, pattern: itempropPattern), !directions.isEmpty {
