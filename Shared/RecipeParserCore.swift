@@ -110,6 +110,36 @@ struct RecipeParserCore {
 
     // MARK: - JSON-LD Parsing (Schema.org Recipe)
 
+    /// Recursively collect all Recipe-typed dicts from a JSON-LD value.
+    /// Handles @graph arrays, ItemList.itemListElement[].item nesting, and plain arrays.
+    private static func collectRecipeCandidates(from value: Any) -> [[String: Any]] {
+        var results: [[String: Any]] = []
+        if let dict = value as? [String: Any] {
+            let type_ = dict["@type"]
+            let isRecipe: Bool
+            if let s = type_ as? String { isRecipe = s == "Recipe" }
+            else if let a = type_ as? [String] { isRecipe = a.contains("Recipe") }
+            else { isRecipe = false }
+            if isRecipe { results.append(dict) }
+            // Recurse into @graph
+            if let graph = dict["@graph"] as? [Any] {
+                for item in graph { results += collectRecipeCandidates(from: item) }
+            }
+            // Recurse into ItemList / ListItem nested items
+            if let elems = dict["itemListElement"] as? [Any] {
+                for elem in elems {
+                    if let elemDict = elem as? [String: Any] {
+                        let nested = elemDict["item"] ?? elem
+                        results += collectRecipeCandidates(from: nested)
+                    }
+                }
+            }
+        } else if let array = value as? [Any] {
+            for item in array { results += collectRecipeCandidates(from: item) }
+        }
+        return results
+    }
+
     static func parseJSONLD(html: String, sourceURL: String) -> ParsedRecipe? {
         let pattern = #"<script[^>]*type\s*=\s*["']?application/ld\+json["']?[^>]*>([\s\S]*?)</script>"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
@@ -119,44 +149,23 @@ struct RecipeParserCore {
         let range = NSRange(html.startIndex..., in: html)
         let matches = regex.matches(in: html, range: range)
 
+        var best: ParsedRecipe? = nil
         for match in matches {
             guard let jsonRange = Range(match.range(at: 1), in: html) else { continue }
             let jsonString = String(html[jsonRange])
             guard let jsonData = jsonString.data(using: .utf8) else { continue }
             guard let json = try? JSONSerialization.jsonObject(with: jsonData) else { continue }
 
-            if let dict = json as? [String: Any] {
-                if let recipe = extractRecipe(from: dict, sourceURL: sourceURL) {
-                    return recipe
-                }
-                // Cast as [Any] so mixed arrays (dicts + other types) don't fail
-                if let graph = dict["@graph"] as? [Any] {
-                    for item in graph {
-                        if let itemDict = item as? [String: Any],
-                           let recipe = extractRecipe(from: itemDict, sourceURL: sourceURL) {
-                            return recipe
-                        }
-                    }
-                }
-            } else if let array = json as? [Any] {
-                for item in array {
-                    guard let itemDict = item as? [String: Any] else { continue }
-                    if let recipe = extractRecipe(from: itemDict, sourceURL: sourceURL) {
-                        return recipe
-                    }
-                    if let graph = itemDict["@graph"] as? [Any] {
-                        for graphItem in graph {
-                            if let graphDict = graphItem as? [String: Any],
-                               let recipe = extractRecipe(from: graphDict, sourceURL: sourceURL) {
-                                return recipe
-                            }
-                        }
-                    }
+            for candidateDict in collectRecipeCandidates(from: json) {
+                guard let recipe = extractRecipe(from: candidateDict, sourceURL: sourceURL) else { continue }
+                // Prefer the candidate with the most directions (list beats string summary)
+                if best == nil || recipe.directions.count > best!.directions.count {
+                    best = recipe
                 }
             }
         }
 
-        return nil
+        return best
     }
 
     private static func extractRecipe(from dict: [String: Any], sourceURL: String) -> ParsedRecipe? {

@@ -462,72 +462,77 @@ def fetch_and_parse(url: str):
         print(textwrap.fill(d, width=76, initial_indent="    ", subsequent_indent="    "))
 
 
+def _collect_recipe_candidates(data) -> list[dict]:
+    """Recursively collect all Recipe-type dicts from a JSON-LD structure."""
+    recipes = []
+    if isinstance(data, dict):
+        dtype = data.get("@type")
+        if dtype == "Recipe" or (isinstance(dtype, list) and "Recipe" in dtype):
+            recipes.append(data)
+        # Recurse into @graph
+        for item in (data.get("@graph") or []):
+            recipes.extend(_collect_recipe_candidates(item))
+        # Recurse into ItemList / ListItem nested items
+        for elem in (data.get("itemListElement") or []):
+            if isinstance(elem, dict):
+                recipes.extend(_collect_recipe_candidates(elem.get("item") or elem))
+    elif isinstance(data, list):
+        for item in data:
+            recipes.extend(_collect_recipe_candidates(item))
+    return recipes
+
+
+def _directions_from_instructions(instructions) -> list[str]:
+    """Extract step strings from a recipeInstructions value (list or string)."""
+    directions = []
+    if isinstance(instructions, list):
+        for step in instructions:
+            if isinstance(step, str):
+                directions.append(step)
+            elif isinstance(step, dict):
+                step_type = step.get("@type", "")
+                if step_type == "HowToSection":
+                    for item in (step.get("itemListElement") or []):
+                        if isinstance(item, dict):
+                            t = item.get("text") or item.get("name") or ""
+                            if t:
+                                directions.append(t)
+                elif step.get("text"):
+                    directions.append(step["text"])
+                elif step.get("itemListElement"):
+                    for item in step["itemListElement"]:
+                        if isinstance(item, dict):
+                            t = item.get("text") or item.get("name") or ""
+                            if t:
+                                directions.append(t)
+                elif step.get("name"):
+                    directions.append(step["name"])
+    elif isinstance(instructions, str):
+        text = re.sub(r"</(?:p|li|div|br\s*/?)>", "\n", instructions)
+        text = re.sub(r"<br\s*/?>", "\n", text)
+        text = strip_html(text)
+        directions = [l.strip() for l in text.split("\n") if l.strip()]
+    return [strip_html(d) for d in directions if d]
+
+
 def extract_json_ld_directions(html: str) -> list[str]:
     """Port of the JSON-LD recipeInstructions extraction path."""
     import json
     ld_pattern = r'<script[^>]*type\s*=\s*["\']?application/ld\+json["\']?[^>]*>([\s\S]*?)</script>'
+    best: list[str] = []
     for m in re.finditer(ld_pattern, html, re.IGNORECASE):
         try:
             data = json.loads(m.group(1))
         except json.JSONDecodeError:
             continue
 
-        candidates = []
-        if isinstance(data, dict):
-            candidates.append(data)
-            for item in (data.get("@graph") or []):
-                if isinstance(item, dict):
-                    candidates.append(item)
-        elif isinstance(data, list):
-            for item in data:
-                if isinstance(item, dict):
-                    candidates.append(item)
-                    for gi in (item.get("@graph") or []):
-                        if isinstance(gi, dict):
-                            candidates.append(gi)
+        for recipe in _collect_recipe_candidates(data):
+            directions = _directions_from_instructions(recipe.get("recipeInstructions", []))
+            # Prefer candidates with more steps (list-based instructions beat string summaries)
+            if len(directions) > len(best):
+                best = directions
 
-        for d in candidates:
-            dtype = d.get("@type")
-            is_recipe = dtype == "Recipe" or (isinstance(dtype, list) and "Recipe" in dtype)
-            if not is_recipe:
-                continue
-
-            instructions = d.get("recipeInstructions", [])
-            directions = []
-            if isinstance(instructions, list) and all(isinstance(s, str) for s in instructions):
-                directions = instructions
-            elif isinstance(instructions, list):
-                # Use element-by-element checking (like [Any] in Swift) to handle mixed arrays
-                for step in instructions:
-                    if isinstance(step, str):
-                        directions.append(step)
-                    elif isinstance(step, dict):
-                        step_type = step.get("@type", "")
-                        if step_type == "HowToSection":
-                            for item in (step.get("itemListElement") or []):
-                                if isinstance(item, dict):
-                                    t = item.get("text") or item.get("name") or ""
-                                    if t:
-                                        directions.append(t)
-                        elif step.get("text"):
-                            directions.append(step["text"])
-                        elif step.get("itemListElement"):
-                            for item in step["itemListElement"]:
-                                if isinstance(item, dict):
-                                    t = item.get("text") or item.get("name") or ""
-                                    if t:
-                                        directions.append(t)
-                        elif step.get("name"):
-                            directions.append(step["name"])
-            elif isinstance(instructions, str):
-                text = re.sub(r"</(?:p|li|div|br\s*/?)>", "\n", instructions)
-                text = re.sub(r"<br\s*/?>", "\n", text)
-                text = strip_html(text)
-                directions = [l.strip() for l in text.split("\n") if l.strip()]
-
-            if directions:
-                return [strip_html(d) for d in directions]
-    return []
+    return best
 
 
 def full_parse(html: str, source_url: str = "test", verbose: bool = False):
