@@ -81,6 +81,13 @@ struct RecipeListView: View {
                             }
                             .tint(.blue)
                         }
+                        .contextMenu {
+                            categoryMenuItems(for: recipe)
+                            Divider()
+                            Button(action: { shareRecipe(recipe) }) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                        }
                     }
                     .onDelete { offsets in
                         deleteRecipesInSection(at: offsets, in: groupIndex)
@@ -117,6 +124,8 @@ struct RecipeListView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .contextMenu {
+                                    categoryMenuItems(for: recipe)
+                                    Divider()
                                     Button(action: { shareRecipe(recipe) }) {
                                         Label("Share", systemImage: "square.and.arrow.up")
                                     }
@@ -406,6 +415,34 @@ struct RecipeListView: View {
         }
     }
     
+    @ViewBuilder
+    private func categoryMenuItems(for recipe: Recipe) -> some View {
+        if !store.categories.isEmpty {
+            if recipe.categoryID != nil {
+                Button(action: { assignCategory(nil, to: recipe) }) {
+                    Label("Remove from Category", systemImage: "xmark.circle")
+                }
+            }
+            Menu("Move to Category") {
+                ForEach(store.categories) { category in
+                    Button(action: { assignCategory(category, to: recipe) }) {
+                        if recipe.categoryID == category.id {
+                            Label(category.name, systemImage: "checkmark")
+                        } else {
+                            Text(category.name)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func assignCategory(_ category: Category?, to recipe: Recipe) {
+        var updated = recipe
+        updated.categoryID = category?.id
+        store.saveRecipe(updated)
+    }
+
     private func deleteRecipesInSection(at offsets: IndexSet, in sectionIndex: Int) {
         let group = groupedRecipes[sectionIndex]
         let recipesToDeleteList = offsets.map { group.recipes[$0] }
