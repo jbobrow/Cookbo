@@ -21,6 +21,106 @@ from typing import Optional
 # Port of RecipeURLImporter's parsing helpers
 # ---------------------------------------------------------------------------
 
+def strip_leading_bullets(s: str) -> str:
+    """Port of RecipeParserCore.stripLeadingBullets(_:)"""
+    bullets = set('•·▪▫■□▸▹►▻◆◇○●◉➤➢➣➥➦\u2013\u2014-*☐☑☒◻◼🔲🔳')
+    s = s.strip()
+    while s and s[0] in bullets:
+        s = s[1:].strip()
+    return s
+
+
+def extract_list_items(list_html: str) -> list[str]:
+    """Port of RecipeParserCore.extractListItems(from:)"""
+    items = []
+    for m in re.finditer(r'<li[^>]*>([\s\S]*?)</li>', list_html, re.IGNORECASE | re.DOTALL):
+        content = m.group(1)
+        # Remove screen-reader-only spans
+        content = re.sub(
+            r'<span[^>]*(?:sr-only|screen-reader-text)[^>]*>[\s\S]*?</span>',
+            '', content, flags=re.IGNORECASE | re.DOTALL)
+        # Remove checkbox inputs/labels
+        content = re.sub(
+            r'<(?:input|label)[^>]*/?>|<label[^>]*>[\s\S]*?</label>',
+            '', content, flags=re.IGNORECASE | re.DOTALL)
+        text = strip_leading_bullets(strip_html(content))
+        if text:
+            items.append(text)
+    return items
+
+
+def parse_ingredient_groups_from_html(html: str) -> list[dict]:
+    """Port of RecipeParserCore.parseIngredientGroupsFromHTML(html:).
+    Returns a list of dicts: [{'name': str, 'ingredients': [str]}]."""
+    groups: list[dict] = []
+
+    # Strategy 1: WPRM — div[class*="wprm-recipe-ingredient-group"]
+    wprm_pattern = r'<div[\s][^>]*?class\s*=\s*["\']?wprm-recipe-ingredient-group\b[^>]*>([\s\S]*?)</ul>'
+    for m in re.finditer(wprm_pattern, html, re.IGNORECASE | re.DOTALL):
+        content = m.group(1)
+        nm = re.search(
+            r'<(?:h[2-6]|span)[^>]*wprm-recipe-group-name[^>]*>([\s\S]*?)</(?:h[2-6]|span)>',
+            content, re.IGNORECASE | re.DOTALL)
+        name = strip_html(nm.group(1)) if nm else ''
+        items = extract_list_items(content)
+        if items:
+            groups.append({'name': name, 'ingredients': items})
+    if groups:
+        return groups
+
+    # Strategy 2: ingredientgroup/ingredient-group class headers followed by <ul>
+    header_pattern = (
+        r'<(?:h[2-6]|p|span|div)[^>]*class\s*=\s*["\'][^"\']*'
+        r'(?:ingredientgroup|ingredient-group|ingredient_group)'
+        r'[^"\']*["\'][^>]*>([\s\S]*?)</(?:h[2-6]|p|span|div)>\s*<ul[^>]*>([\s\S]*?)</ul>'
+    )
+    for m in re.finditer(header_pattern, html, re.IGNORECASE | re.DOTALL):
+        name = strip_html(m.group(1))
+        items = extract_list_items(m.group(2))
+        if items:
+            groups.append({'name': name, 'ingredients': items})
+    if groups:
+        return groups
+
+    # Strategy 3: h2-h4 headers starting with "for the" / "for " followed by <ul>
+    # Use [^<]* for the header name to prevent lazy [\s\S]*? from crossing into
+    # adjacent heading tags via backtracking (e.g. swallowing <h3>Title</h3><h4>Name)
+    for_the_pattern = r'<h[2-4][^>]*>([^<]*)</h[2-4]>\s*<ul[^>]*>([\s\S]*?)</ul>'
+    for m in re.finditer(for_the_pattern, html, re.IGNORECASE | re.DOTALL):
+        name = strip_html(m.group(1))
+        if name.lower().startswith('for the') or name.lower().startswith('for '):
+            items = extract_list_items(m.group(2))
+            if items:
+                groups.append({'name': name, 'ingredients': items})
+    if groups:
+        return groups
+
+    # Strategy 4: Tasty Recipes plugin — div[class*="tasty-recipes-ingredients"]
+    tasty_ing_pattern = (
+        r'<div[^>]*class\s*=\s*["\'][^"\']*tasty-recipes-ingredients[^"\']*["\'][^>]*>'
+        r'([\s\S]*?)</div>\s*</div>'
+    )
+    m = re.search(tasty_ing_pattern, html, re.IGNORECASE | re.DOTALL)
+    if m:
+        container = m.group(1)
+        # Same [^<]* fix — prevent crossing adjacent h-tag boundaries
+        group_pattern = r'<h[2-6][^>]*>([^<]*)</h[2-6]>\s*<ul[^>]*>([\s\S]*?)</ul>'
+        for gm in re.finditer(group_pattern, container, re.IGNORECASE | re.DOTALL):
+            name = strip_html(gm.group(1))
+            items = extract_list_items(gm.group(2))
+            if items:
+                groups.append({'name': name, 'ingredients': items})
+        if not groups:
+            # No named groups — gather all <ul> items into a single unnamed group
+            all_items: list[str] = []
+            for um in re.finditer(r'<ul[^>]*>([\s\S]*?)</ul>', container, re.IGNORECASE | re.DOTALL):
+                all_items.extend(extract_list_items(um.group(1)))
+            if all_items:
+                groups.append({'name': '', 'ingredients': all_items})
+
+    return groups
+
+
 def strip_html(string: str) -> str:
     """Port of RecipeURLImporter.stripHTML(_:)"""
     result = re.sub(r"<[^>]+>", "", string)
@@ -245,9 +345,18 @@ def run_test(name: str, html: str):
     print(f"TEST: {name}")
     print(f"{'='*70}")
 
+    groups = parse_ingredient_groups_from_html(html)
+    total_ingredients = sum(len(g['ingredients']) for g in groups)
+    print(f"\n--- INGREDIENTS: {total_ingredients} item(s) in {len(groups)} group(s) ---")
+    for g in groups:
+        label = g['name'] if g['name'] else '(ungrouped)'
+        print(f"  [{label}]")
+        for ing in g['ingredients']:
+            print(f"    • {ing}")
+
     directions = parse_directions_from_html(html, verbose=True)
 
-    print(f"\n--- FINAL RESULT: {len(directions)} steps ---")
+    print(f"\n--- DIRECTIONS: {len(directions)} step(s) ---")
     for i, d in enumerate(directions, 1):
         print(f"\n  Step {i}:")
         print(textwrap.fill(d, width=76, initial_indent="    ", subsequent_indent="    "))
@@ -257,15 +366,15 @@ def run_test(name: str, html: str):
 
 def fetch_and_parse(url: str):
     import urllib.request
+    import json
     print(f"\nFetching {url}...")
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req) as resp:
         html = resp.read().decode("utf-8", errors="replace")
     print(f"Fetched {len(html)} bytes.")
 
-    # Show JSON-LD directions if present (to see what the primary parser gets)
+    # Show JSON-LD recipe summary (informational)
     ld_pattern = r'<script[^>]*type\s*=\s*["\']?application/ld\+json["\']?[^>]*>([\s\S]*?)</script>'
-    import json
     for m in re.finditer(ld_pattern, html, re.IGNORECASE):
         try:
             data = json.loads(m.group(1))
@@ -281,20 +390,76 @@ def fetch_and_parse(url: str):
                     if isinstance(item, dict) and item.get("@type") == "Recipe":
                         recipes.append(item)
             for recipe in recipes:
+                ings = recipe.get("recipeIngredient", [])
                 instructions = recipe.get("recipeInstructions", [])
-                print(f"\n--- JSON-LD: {len(instructions)} instruction entries ---")
+                print(f"\n--- JSON-LD: {len(ings)} ingredient(s), {len(instructions)} instruction entr(ies) ---")
                 for i, inst in enumerate(instructions):
                     if isinstance(inst, str):
-                        print(f"  {i+1}. [string] {inst[:80]}...")
+                        print(f"  {i+1}. [string] {inst[:80]}")
                     elif isinstance(inst, dict):
                         t = inst.get("@type", "?")
                         text = inst.get("text", inst.get("name", ""))[:60]
                         items = inst.get("itemListElement", [])
-                        print(f"  {i+1}. [{t}] text={text!r}... ({len(items)} sub-items)")
+                        print(f"  {i+1}. [{t}] {text!r} ({len(items)} sub-items)")
         except json.JSONDecodeError:
             pass
 
-    run_test(f"URL: {url}", html)
+    print(f"\n{'='*70}")
+    print(f"FULL PARSE (JSON-LD + HTML fallback): {url}")
+    print(f"{'='*70}")
+
+    # Ingredients: JSON-LD flat list, upgraded to groups via HTML if available
+    json_ld_ings: list[str] = []
+    for m in re.finditer(ld_pattern, html, re.IGNORECASE):
+        try:
+            data = json.loads(m.group(1))
+            candidates = []
+            if isinstance(data, dict):
+                candidates.append(data)
+                for item in (data.get("@graph") or []):
+                    if isinstance(item, dict):
+                        candidates.append(item)
+            elif isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        candidates.append(item)
+            for d in candidates:
+                dtype = d.get("@type")
+                is_recipe = dtype == "Recipe" or (isinstance(dtype, list) and "Recipe" in dtype)
+                if is_recipe:
+                    json_ld_ings = d.get("recipeIngredient", [])
+                    break
+            if json_ld_ings:
+                break
+        except json.JSONDecodeError:
+            pass
+
+    html_groups = parse_ingredient_groups_from_html(html)
+    if html_groups and len(html_groups) > 1:
+        groups = html_groups
+        print(f"\n--- INGREDIENTS (HTML groups): {sum(len(g['ingredients']) for g in groups)} item(s) in {len(groups)} group(s) ---")
+    elif html_groups:
+        groups = html_groups
+        print(f"\n--- INGREDIENTS (HTML): {sum(len(g['ingredients']) for g in groups)} item(s) ---")
+    elif json_ld_ings:
+        groups = [{'name': '', 'ingredients': [strip_leading_bullets(strip_html(i)) for i in json_ld_ings]}]
+        print(f"\n--- INGREDIENTS (JSON-LD flat): {len(json_ld_ings)} item(s) ---")
+    else:
+        groups = []
+        print("\n--- INGREDIENTS: none found ---")
+
+    for g in groups:
+        label = g['name'] if g['name'] else '(ungrouped)'
+        print(f"  [{label}]")
+        for ing in g['ingredients']:
+            print(f"    • {ing}")
+
+    # Directions: use full_parse (JSON-LD preferred, HTML fallback)
+    directions = full_parse(html, source_url=url, verbose=True)
+    print(f"\n--- DIRECTIONS: {len(directions)} step(s) ---")
+    for i, d in enumerate(directions, 1):
+        print(f"\n  Step {i}:")
+        print(textwrap.fill(d, width=76, initial_indent="    ", subsequent_indent="    "))
 
 
 def extract_json_ld_directions(html: str) -> list[str]:
@@ -434,9 +599,18 @@ if __name__ == "__main__":
         result = run_test("NYT Cooking (nested grouped steps)", NYT_COOKING_HTML)
         check_results(result, 7, "NYT Cooking HTML")
 
-        # Tasty Recipes HTML fallback (no JSON-LD — tests Strategy 0)
+        # Tasty Recipes HTML fallback (no JSON-LD — tests Strategy 0 for directions + Strategy 4 for ingredients)
         result = run_test("Tasty Recipes HTML (mexicanmademeatless.com style)", TASTY_RECIPES_HTML)
         check_results(result, 5, "Tasty Recipes HTML")
+
+        # Verify ingredient groups are parsed correctly from the same HTML
+        groups = parse_ingredient_groups_from_html(TASTY_RECIPES_HTML)
+        total = sum(len(g['ingredients']) for g in groups)
+        print(f"\n{'='*70}")
+        if len(groups) == 2 and total == 6:
+            print(f"PASS [Tasty Recipes HTML ingredients]: Got 2 groups, 6 ingredients.")
+        else:
+            print(f"FAIL [Tasty Recipes HTML ingredients]: Expected 2 groups / 6 ingredients, got {len(groups)} groups / {total} ingredients.")
 
         # Tasty Recipes JSON-LD with HowToSection (tests robust [Any] array handling)
         result_jsonld = full_parse(TASTY_RECIPES_JSONLD_HTML, verbose=True)

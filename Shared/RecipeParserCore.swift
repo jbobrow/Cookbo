@@ -299,7 +299,9 @@ struct RecipeParserCore {
         if !groups.isEmpty { return groups }
 
         // Strategy 3: Generic pattern — header tags (h2-h4) containing "for the" followed by <ul>
-        let forThePattern = #"<h[2-4][^>]*>([\s\S]*?)</h[2-4]>\s*<ul[^>]*>([\s\S]*?)</ul>"#
+        // Use [^<]* for header name to prevent lazy [\s\S]*? from crossing adjacent heading tags
+        // via backtracking (e.g. consuming <h3>Title</h3><h4>Name as a single match).
+        let forThePattern = #"<h[2-4][^>]*>([^<]*)</h[2-4]>\s*<ul[^>]*>([\s\S]*?)</ul>"#
         if let regex = try? NSRegularExpression(pattern: forThePattern, options: .caseInsensitive) {
             let range = NSRange(html.startIndex..., in: html)
             let matches = regex.matches(in: html, range: range)
@@ -325,8 +327,9 @@ struct RecipeParserCore {
             if let match = regex.firstMatch(in: html, range: range),
                let containerRange = Range(match.range(at: 1), in: html) {
                 let containerHTML = String(html[containerRange])
-                // Extract header + ul pairs within the container
-                let groupPattern = #"<h[2-6][^>]*>([\s\S]*?)</h[2-6]>\s*<ul[^>]*>([\s\S]*?)</ul>"#
+                // Extract header + ul pairs within the container.
+                // Use [^<]* for header name to avoid crossing adjacent heading tag boundaries.
+                let groupPattern = #"<h[2-6][^>]*>([^<]*)</h[2-6]>\s*<ul[^>]*>([\s\S]*?)</ul>"#
                 if let groupRegex = try? NSRegularExpression(pattern: groupPattern, options: .caseInsensitive) {
                     let containerRange2 = NSRange(containerHTML.startIndex..., in: containerHTML)
                     let groupMatches = groupRegex.matches(in: containerHTML, range: containerRange2)
