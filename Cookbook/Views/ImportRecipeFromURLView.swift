@@ -376,14 +376,17 @@ struct ImportRecipeFromURLView: View {
             recipe.imageData = previewImageData
         }
 
+        let savedID = recipe.id
         store.saveRecipe(recipe)
 
         if previewImageData == nil, let imageURL = parsed.imageURL {
             Task.detached {
                 if let imageData = await RecipeURLImporter.downloadImage(from: imageURL) {
                     await MainActor.run {
-                        recipe.imageData = imageData
-                        store.saveRecipe(recipe)
+                        if var latest = store.recipes.first(where: { $0.id == savedID }) {
+                            latest.imageData = imageData
+                            store.saveRecipe(latest)
+                        }
                     }
                 }
             }

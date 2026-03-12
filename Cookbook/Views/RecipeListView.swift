@@ -518,7 +518,9 @@ struct RecipeListView: View {
             }
             #endif
         } catch {
+            #if DEBUG
             print("Error sharing recipe: \(error)")
+            #endif
         }
     }
     
@@ -543,7 +545,9 @@ struct RecipeListView: View {
             }
 
         case .failure(let error):
+            #if DEBUG
             print("Error selecting file: \(error)")
+            #endif
             importAlert = ImportAlert(
                 title: "Import Failed",
                 message: error.localizedDescription
@@ -588,7 +592,9 @@ struct RecipeListView: View {
                     store.saveRecipe(recipe)
                     successCount += 1
                 } catch {
+                    #if DEBUG
                     print("Error importing recipe from \(url.lastPathComponent): \(error)")
+                    #endif
                     errorCount += 1
                 }
             }
@@ -611,7 +617,9 @@ struct RecipeListView: View {
             }
             
         case .failure(let error):
+            #if DEBUG
             print("Error selecting files: \(error)")
+            #endif
             importAlert = ImportAlert(
                 title: "Import Failed",
                 message: error.localizedDescription

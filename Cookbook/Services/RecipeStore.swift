@@ -163,7 +163,9 @@ class RecipeStore: ObservableObject {
             // Sort and assign synchronously - don't dispatch to main queue yet
             availableCookbooks = cookbooks.sorted { $0.name < $1.name }
         } catch {
+            #if DEBUG
             print("Error loading cookbooks: \(error)")
+            #endif
             availableCookbooks = []
         }
     }
@@ -174,15 +176,12 @@ class RecipeStore: ObservableObject {
            let uuid = UUID(uuidString: savedID),
            let savedCookbook = availableCookbooks.first(where: { $0.id == uuid }) {
             cookbook = savedCookbook
-            print("Loaded saved cookbook: \(savedCookbook.name)")
         } else if let firstCookbook = availableCookbooks.first {
             // Use first available cookbook
             cookbook = firstCookbook
             userDefaults.set(firstCookbook.id.uuidString, forKey: currentCookbookKey)
-            print("Loaded first available cookbook: \(firstCookbook.name)")
         } else {
             // Only create default cookbook if no cookbooks exist
-            print("No cookbooks found, creating default cookbook")
             cookbook = Cookbook()
             createCookbook(cookbook)
         }
@@ -204,7 +203,9 @@ class RecipeStore: ObservableObject {
                 self.cookbook = loadedCookbook
             }
         } catch {
+            #if DEBUG
             print("Error loading cookbook: \(error)")
+            #endif
         }
     }
 
@@ -230,7 +231,9 @@ class RecipeStore: ObservableObject {
                 }
             }
         } catch {
+            #if DEBUG
             print("Error saving cookbook: \(error)")
+            #endif
         }
     }
 
@@ -282,7 +285,9 @@ class RecipeStore: ObservableObject {
                 }
             }
         } catch {
+            #if DEBUG
             print("Error deleting cookbook: \(error)")
+            #endif
         }
     }
 
@@ -318,7 +323,9 @@ class RecipeStore: ObservableObject {
             try data.write(to: fileURL, options: .atomic)
             return fileURL
         } catch {
+            #if DEBUG
             print("Error exporting cookbook: \(error)")
+            #endif
             return nil
         }
     }
@@ -398,16 +405,15 @@ class RecipeStore: ObservableObject {
 
             return .success(newCookbook)
         } catch {
+            #if DEBUG
             print("Error importing cookbook: \(error)")
+            #endif
             return .failure(error)
         }
     }
     
     func loadRecipes() {
-        guard let url = iCloudURL else {
-            print("iCloud not available")
-            return
-        }
+        guard let url = iCloudURL else { return }
 
         do {
             let allFiles = try fileManager.contentsOfDirectory(
@@ -435,7 +441,9 @@ class RecipeStore: ObservableObject {
                         loadedIDs.insert(recipe.id)
                     }
                 } catch {
+                    #if DEBUG
                     print("Error loading recipe from \(fileURL.lastPathComponent): \(error)")
+                    #endif
                 }
             }
 
@@ -477,7 +485,9 @@ class RecipeStore: ObservableObject {
                     loadedRecipes.append(recipe)
                     loadedIDs.insert(recipe.id)
                 } catch {
+                    #if DEBUG
                     print("Error migrating recipe from \(fileURL.lastPathComponent): \(error)")
+                    #endif
                 }
             }
 
@@ -486,7 +496,9 @@ class RecipeStore: ObservableObject {
                 self.cleanupOrphanedCategoryReferences()
             }
         } catch {
+            #if DEBUG
             print("Error loading recipes: \(error)")
+            #endif
         }
     }
     
@@ -526,7 +538,9 @@ class RecipeStore: ObservableObject {
             }
             recipes.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         } catch {
+            #if DEBUG
             print("Error saving recipe: \(error)")
+            #endif
         }
     }
     
@@ -596,7 +610,9 @@ class RecipeStore: ObservableObject {
                 self.categories = loadedCategories.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             }
         } catch {
+            #if DEBUG
             print("Error loading categories: \(error)")
+            #endif
             categories = []
         }
     }
@@ -631,7 +647,9 @@ class RecipeStore: ObservableObject {
             let data = try JSONEncoder().encode(categories)
             try data.write(to: url, options: .atomic)
         } catch {
+            #if DEBUG
             print("Error saving categories: \(error)")
+            #endif
         }
     }
 

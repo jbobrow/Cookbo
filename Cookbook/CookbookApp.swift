@@ -147,16 +147,19 @@ struct CookbookApp: App {
                 notes: parsed.notes
             )
 
+            let savedID = recipe.id
             recipeStore.saveRecipe(recipe)
 
-            // Download image in background
+            // Download image in background; look up by ID so we don't overwrite user edits
             if let imageURL = parsed.imageURL {
                 Task.detached {
                     if let url = URL(string: imageURL),
                        let (imageData, _) = try? await URLSession.shared.data(from: url) {
                         await MainActor.run {
-                            recipe.imageData = imageData
-                            recipeStore.saveRecipe(recipe)
+                            if var latest = recipeStore.recipes.first(where: { $0.id == savedID }) {
+                                latest.imageData = imageData
+                                recipeStore.saveRecipe(latest)
+                            }
                         }
                     }
                 }
