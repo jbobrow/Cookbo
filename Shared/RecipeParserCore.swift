@@ -87,6 +87,11 @@ struct RecipeParserCore {
     // MARK: - Main Entry Point
 
     static func parseRecipe(html: String, sourceURL: String) -> ParsedRecipe? {
+        // Try Instagram-specific parsing for Instagram URLs
+        if isInstagramURL(sourceURL), let recipe = parseInstagramPage(html: html, sourceURL: sourceURL) {
+            return recipe
+        }
+
         if var recipe = parseJSONLD(html: html, sourceURL: sourceURL) {
             // Always try HTML fallback and use whichever has more steps
             let htmlDirections = parseDirectionsFromHTML(html: html)
@@ -106,6 +111,371 @@ struct RecipeParserCore {
         }
 
         return nil
+    }
+
+    // MARK: - Instagram Detection & Parsing
+
+    static func isInstagramURL(_ urlString: String) -> Bool {
+        guard let url = URL(string: urlString),
+              let host = url.host?.lowercased() else { return false }
+        return host == "instagram.com" || host == "www.instagram.com"
+            || host.hasSuffix(".instagram.com")
+    }
+
+    /// Extracts the canonical Instagram post/reel URL by stripping tracking parameters.
+    private static func cleanInstagramURL(_ urlString: String) -> String {
+        guard let url = URL(string: urlString),
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return urlString
+        }
+        components.queryItems = nil
+        components.fragment = nil
+        return components.url?.absoluteString ?? urlString
+    }
+
+    /// Parses an Instagram page to extract recipe data from the post caption.
+    static func parseInstagramPage(html: String, sourceURL: String) -> ParsedRecipe? {
+        let caption = extractInstagramCaption(html: html)
+        let imageURL = extractMetaContent(html: html, property: "og:image")
+
+        // Extract a title from og:title — typically "Username on Instagram: \"snippet...\""
+        let ogTitle = extractMetaContent(html: html, property: "og:title") ?? ""
+
+        guard !caption.isEmpty || !ogTitle.isEmpty else { return nil }
+
+        // Parse recipe components from the caption text
+        let parsed = parseInstagramCaption(caption)
+
+        // Derive a recipe title: prefer one extracted from caption, fall back to og:title cleanup
+        let title: String
+        if !parsed.title.isEmpty {
+            title = parsed.title
+        } else {
+            title = cleanInstagramTitle(ogTitle)
+        }
+
+        guard !title.isEmpty else { return nil }
+
+        let cleanURL = cleanInstagramURL(sourceURL)
+
+        return ParsedRecipe(
+            title: title,
+            ingredientGroups: parsed.ingredientGroups.isEmpty ? nil : parsed.ingredientGroups,
+            ingredients: parsed.ingredientGroups.isEmpty ? [] : [],
+            directions: parsed.directions,
+            sourceURL: cleanURL,
+            imageURL: imageURL,
+            prepDuration: 0,
+            cookDuration: 0,
+            notes: parsed.notes
+        )
+    }
+
+    /// Extracts the full Instagram post caption from the HTML.
+    /// Tries multiple strategies since Instagram's HTML structure varies.
+    private static func extractInstagramCaption(html: String) -> String {
+        // Strategy 1: Look for the caption in meta description (usually most complete)
+        if let desc = extractMetaContent(html: html, property: "og:description") {
+            // Instagram og:description often has format: "N likes, N comments - \"caption text\""
+            // or just the caption text with possible truncation
+            let cleaned = cleanInstagramDescription(desc)
+            if cleaned.count > 20 {
+                return cleaned
+            }
+        }
+
+        // Strategy 2: Look for caption in embedded JSON data (window._sharedData or similar)
+        // Instagram sometimes embeds full post data in script tags
+        let jsonPatterns = [
+            #""caption"\s*:\s*\{[^}]*"text"\s*:\s*"([^"]+)"#,
+            #""edge_media_to_caption"\s*:\s*\{[^}]*"text"\s*:\s*"([^"]+)"#
+        ]
+        for pattern in jsonPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []),
+               let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+               let captionRange = Range(match.range(at: 1), in: html) {
+                let raw = String(html[captionRange])
+                // Unescape JSON string escapes
+                let unescaped = raw
+                    .replacingOccurrences(of: "\\n", with: "\n")
+                    .replacingOccurrences(of: "\\u0026", with: "&")
+                    .replacingOccurrences(of: "\\\"", with: "\"")
+                    .replacingOccurrences(of: "\\/", with: "/")
+                    .replacingOccurrences(of: "\\u2022", with: "\u{2022}")
+                    .replacingOccurrences(of: "\\u2019", with: "\u{2019}")
+                    .replacingOccurrences(of: "\\u2018", with: "\u{2018}")
+                    .replacingOccurrences(of: "\\u201c", with: "\u{201C}")
+                    .replacingOccurrences(of: "\\u201d", with: "\u{201D}")
+                if unescaped.count > 20 {
+                    return unescaped
+                }
+            }
+        }
+
+        // Strategy 3: Fall back to meta description (non-OG)
+        if let desc = extractMetaContent(html: html, property: "description") {
+            let cleaned = cleanInstagramDescription(desc)
+            if cleaned.count > 20 {
+                return cleaned
+            }
+        }
+
+        return ""
+    }
+
+    /// Cleans up Instagram's og:description format.
+    /// Input often looks like: "123 likes, 5 comments - \"actual caption here\""
+    private static func cleanInstagramDescription(_ desc: String) -> String {
+        var text = desc
+
+        // Remove the "N likes, N comments - " prefix pattern
+        if let regex = try? NSRegularExpression(
+            pattern: #"^[\d,.]+ likes?,?\s*[\d,.]+ comments?\s*[-–—]\s*"#,
+            options: .caseInsensitive
+        ) {
+            let range = NSRange(text.startIndex..., in: text)
+            text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+        }
+
+        // Also handle: "N Likes, N Comments - Author on Instagram: \"caption\""
+        if let regex = try? NSRegularExpression(
+            pattern: #"^.*?\bon Instagram:\s*"#,
+            options: .caseInsensitive
+        ) {
+            let range = NSRange(text.startIndex..., in: text)
+            text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+        }
+
+        // Strip surrounding quotes
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("\"") { text = String(text.dropFirst()) }
+        if text.hasSuffix("\"") { text = String(text.dropLast()) }
+
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Cleans up the og:title from Instagram.
+    /// Input looks like: "Username on Instagram: \"Recipe Title Here\""
+    private static func cleanInstagramTitle(_ ogTitle: String) -> String {
+        var title = ogTitle
+
+        // Remove "Username on Instagram: " prefix
+        if let regex = try? NSRegularExpression(
+            pattern: #"^.*?\bon Instagram:\s*"#,
+            options: .caseInsensitive
+        ) {
+            let range = NSRange(title.startIndex..., in: title)
+            title = regex.stringByReplacingMatches(in: title, range: range, withTemplate: "")
+        }
+
+        // Strip surrounding quotes
+        title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.hasPrefix("\"") { title = String(title.dropFirst()) }
+        if title.hasSuffix("\"") { title = String(title.dropLast()) }
+
+        // Truncate at first line break or period if the title is very long (caption snippet)
+        let lines = title.components(separatedBy: .newlines)
+        title = lines.first ?? title
+
+        // If still very long, truncate at ~80 chars on a word boundary
+        if title.count > 80 {
+            let truncated = String(title.prefix(80))
+            if let lastSpace = truncated.lastIndex(of: " ") {
+                title = String(truncated[..<lastSpace]) + "…"
+            }
+        }
+
+        return title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Instagram Caption Recipe Extraction
+
+    struct InstagramRecipeParts {
+        var title: String = ""
+        var ingredientGroups: [ParsedIngredientGroup] = []
+        var directions: [String] = []
+        var notes: String = ""
+    }
+
+    /// Parses unstructured Instagram caption text to extract recipe components.
+    static func parseInstagramCaption(_ caption: String) -> InstagramRecipeParts {
+        guard !caption.isEmpty else { return InstagramRecipeParts() }
+
+        var result = InstagramRecipeParts()
+
+        // Normalize line endings
+        let text = caption
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        let lines = text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+
+        // Identify sections by header keywords
+        enum Section { case unknown, title, ingredients, directions, notes }
+        var currentSection: Section = .unknown
+        var titleLines: [String] = []
+        var ingredientLines: [String] = []
+        var directionLines: [String] = []
+        var noteLines: [String] = []
+        var currentGroupName = ""
+        var groups: [(name: String, items: [String])] = []
+
+        let ingredientHeaders = [
+            "ingredients", "ingredient", "what you need", "what you'll need",
+            "you'll need", "you will need", "shopping list", "for the recipe"
+        ]
+        let directionHeaders = [
+            "directions", "direction", "instructions", "instruction", "steps",
+            "method", "how to make", "how to", "preparation", "prep",
+            "to make", "procedure", "let's cook", "let's make", "recipe"
+        ]
+        let noteHeaders = [
+            "notes", "note", "tips", "tip", "variations", "serving",
+            "nutrition", "storage", "substitutions"
+        ]
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { continue }
+
+            let lower = trimmed.lowercased()
+                .trimmingCharacters(in: CharacterSet(charactersIn: ":;-*•#🔸🔹📝🥘🍳🧑\u{200D}🍴✨💡👇⬇️"))
+                .trimmingCharacters(in: .whitespaces)
+
+            // Check if this line is a section header
+            if ingredientHeaders.contains(where: { lower == $0 || lower.hasPrefix($0 + ":") || lower.hasPrefix($0 + " ") && lower.count < $0.count + 15 }) {
+                // Flush any current ingredient group before switching
+                if !ingredientLines.isEmpty {
+                    groups.append((name: currentGroupName, items: ingredientLines))
+                    ingredientLines = []
+                }
+                currentGroupName = ""
+                currentSection = .ingredients
+                continue
+            }
+
+            if directionHeaders.contains(where: { lower == $0 || lower.hasPrefix($0 + ":") || lower.hasPrefix($0 + " ") && lower.count < $0.count + 15 }) {
+                // Flush remaining ingredients
+                if !ingredientLines.isEmpty {
+                    groups.append((name: currentGroupName, items: ingredientLines))
+                    ingredientLines = []
+                }
+                currentSection = .directions
+                continue
+            }
+
+            if noteHeaders.contains(where: { lower == $0 || lower.hasPrefix($0 + ":") }) {
+                currentSection = .notes
+                continue
+            }
+
+            // Check for ingredient sub-group headers (e.g., "For the sauce:")
+            if currentSection == .ingredients {
+                let forThePattern = #"^(?:for (?:the )?|)([\w\s]+):$"#
+                if let regex = try? NSRegularExpression(pattern: forThePattern, options: .caseInsensitive),
+                   let match = regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+                   let nameRange = Range(match.range(at: 1), in: trimmed) {
+                    let name = String(trimmed[nameRange]).trimmingCharacters(in: .whitespaces)
+                    // If it looks like a group header and is short
+                    if name.count < 40 && !name.contains(",") {
+                        if !ingredientLines.isEmpty {
+                            groups.append((name: currentGroupName, items: ingredientLines))
+                            ingredientLines = []
+                        }
+                        currentGroupName = trimmed.hasSuffix(":") ? String(trimmed.dropLast()) : trimmed
+                        continue
+                    }
+                }
+            }
+
+            // Add lines to the appropriate section
+            switch currentSection {
+            case .unknown:
+                // Before any section header, treat as title/intro
+                titleLines.append(trimmed)
+            case .title:
+                titleLines.append(trimmed)
+            case .ingredients:
+                let cleaned = stripLeadingBullets(trimmed)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "-–•*▪️✅☑️🟢"))
+                    .trimmingCharacters(in: .whitespaces)
+                if !cleaned.isEmpty {
+                    ingredientLines.append(cleaned)
+                }
+            case .directions:
+                var cleaned = trimmed
+                // Remove leading step numbers like "1.", "1)", "Step 1:"
+                if let regex = try? NSRegularExpression(pattern: #"^(?:step\s*)?\d+[\.\)\:\-]\s*"#, options: .caseInsensitive) {
+                    let range = NSRange(cleaned.startIndex..., in: cleaned)
+                    cleaned = regex.stringByReplacingMatches(in: cleaned, range: range, withTemplate: "")
+                }
+                cleaned = stripLeadingBullets(cleaned)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "-–•*▪️"))
+                    .trimmingCharacters(in: .whitespaces)
+                if !cleaned.isEmpty {
+                    directionLines.append(cleaned)
+                }
+            case .notes:
+                noteLines.append(trimmed)
+            }
+        }
+
+        // Flush remaining ingredient group
+        if !ingredientLines.isEmpty {
+            groups.append((name: currentGroupName, items: ingredientLines))
+        }
+
+        // Build the title from initial lines (before any section header)
+        if !titleLines.isEmpty {
+            // Use first meaningful line as title, rest as notes preamble
+            result.title = titleLines.first ?? ""
+
+            // Remove hashtags and emoji-only segments from title
+            result.title = removeHashtags(result.title)
+            if result.title.count > 80 {
+                let truncated = String(result.title.prefix(80))
+                if let lastSpace = truncated.lastIndex(of: " ") {
+                    result.title = String(truncated[..<lastSpace]) + "…"
+                }
+            }
+
+            // Add remaining intro lines to notes if they contain useful text
+            if titleLines.count > 1 {
+                let extraIntro = titleLines.dropFirst()
+                    .filter { !$0.isEmpty && !isHashtagLine($0) }
+                    .joined(separator: "\n")
+                if !extraIntro.isEmpty {
+                    noteLines.insert(contentsOf: extraIntro.components(separatedBy: "\n"), at: 0)
+                }
+            }
+        }
+
+        // Build ingredient groups
+        result.ingredientGroups = groups.map { ParsedIngredientGroup(name: $0.name, ingredients: $0.items) }
+
+        // Build directions
+        result.directions = directionLines
+
+        // Build notes (strip hashtag lines)
+        let filteredNotes = noteLines.filter { !isHashtagLine($0) }
+        result.notes = filteredNotes.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return result
+    }
+
+    /// Returns true if the line is primarily hashtags.
+    private static func isHashtagLine(_ line: String) -> Bool {
+        let words = line.split(separator: " ")
+        guard !words.isEmpty else { return false }
+        let hashtagCount = words.filter { $0.hasPrefix("#") }.count
+        return Double(hashtagCount) / Double(words.count) > 0.5
+    }
+
+    /// Removes hashtags from a string.
+    private static func removeHashtags(_ text: String) -> String {
+        text.replacingOccurrences(of: #"#\w+"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "  +", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - JSON-LD Parsing (Schema.org Recipe)

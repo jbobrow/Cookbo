@@ -52,7 +52,58 @@ struct RecipeParser {
             return recipe
         }
 
+        // For Instagram URLs, try the oEmbed API as a fallback
+        if RecipeParserCore.isInstagramURL(urlString) {
+            if let recipe = await fetchInstagramOEmbed(urlString: urlString, html: html) {
+                return recipe
+            }
+        }
+
         throw ParseError.parsingFailed
+    }
+
+    /// Fallback: use Instagram's oEmbed endpoint to get post metadata.
+    private static func fetchInstagramOEmbed(urlString: String, html: String) async -> ParsedRecipe? {
+        guard let encoded = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let oembedURL = URL(string: "https://www.instagram.com/api/v1/oembed/?url=\(encoded)") else {
+            return nil
+        }
+
+        guard let (data, _) = try? await URLSession.shared.data(from: oembedURL),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        let caption = json["title"] as? String ?? ""
+        let authorName = json["author_name"] as? String ?? ""
+        let thumbnailURL = json["thumbnail_url"] as? String
+
+        guard !caption.isEmpty else { return nil }
+
+        let parsed = RecipeParserCore.parseInstagramCaption(caption)
+
+        let title: String
+        if !parsed.title.isEmpty {
+            title = parsed.title
+        } else if !authorName.isEmpty {
+            title = "Recipe by \(authorName)"
+        } else {
+            return nil
+        }
+
+        let imageURL = thumbnailURL ?? RecipeParserCore.extractMetaContent(html: html, property: "og:image")
+
+        return ParsedRecipe(
+            title: title,
+            ingredientGroups: parsed.ingredientGroups.isEmpty ? nil : parsed.ingredientGroups,
+            ingredients: parsed.ingredientGroups.isEmpty ? [] : [],
+            directions: parsed.directions,
+            sourceURL: urlString,
+            imageURL: imageURL,
+            prepDuration: 0,
+            cookDuration: 0,
+            notes: parsed.notes
+        )
     }
 
     static func formatDuration(_ seconds: TimeInterval) -> String? {
