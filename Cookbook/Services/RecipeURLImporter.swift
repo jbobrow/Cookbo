@@ -94,16 +94,25 @@ struct RecipeURLImporter {
         // Also try to get og:image from the HTML if thumbnail is missing
         let imageURL = thumbnailURL ?? RecipeParserCore.extractMetaContent(html: html, property: "og:image")
 
+        // If structured parsing found sections, use them; otherwise store the
+        // full caption in notes so the user still gets the recipe text.
+        let notes: String
+        if parsed.ingredientGroups.isEmpty && parsed.directions.isEmpty {
+            notes = caption
+        } else {
+            notes = parsed.notes
+        }
+
         return ParsedRecipe(
             title: title,
             ingredientGroups: parsed.ingredientGroups.isEmpty ? nil : parsed.ingredientGroups,
-            ingredients: parsed.ingredientGroups.isEmpty ? [] : [],
+            ingredients: [],
             directions: parsed.directions,
             sourceURL: urlString,
             imageURL: imageURL,
             prepDuration: parsed.prepDuration,
             cookDuration: parsed.cookDuration,
-            notes: parsed.notes
+            notes: notes
         )
     }
 

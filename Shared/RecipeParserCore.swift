@@ -134,6 +134,8 @@ struct RecipeParserCore {
     }
 
     /// Parses an Instagram page to extract recipe data from the post caption.
+    /// Returns nil when the caption is truncated or lacks meaningful recipe data,
+    /// so that callers can fall back to the oEmbed API.
     static func parseInstagramPage(html: String, sourceURL: String) -> ParsedRecipe? {
         let caption = extractInstagramCaption(html: html)
         let imageURL = extractMetaContent(html: html, property: "og:image")
@@ -145,6 +147,13 @@ struct RecipeParserCore {
 
         // Parse recipe components from the caption text
         let parsed = parseInstagramCaption(caption)
+
+        // Require at least some ingredients OR directions to consider this a valid recipe.
+        // Instagram's og:description is often truncated, so if we only got a title
+        // with no actual recipe data, return nil to let the oEmbed fallback try.
+        guard !parsed.ingredientGroups.isEmpty || !parsed.directions.isEmpty else {
+            return nil
+        }
 
         // Derive a recipe title: prefer one extracted from caption, fall back to og:title cleanup
         let title: String
@@ -160,8 +169,8 @@ struct RecipeParserCore {
 
         return ParsedRecipe(
             title: title,
-            ingredientGroups: parsed.ingredientGroups.isEmpty ? nil : parsed.ingredientGroups,
-            ingredients: parsed.ingredientGroups.isEmpty ? [] : [],
+            ingredientGroups: parsed.ingredientGroups,
+            ingredients: [],
             directions: parsed.directions,
             sourceURL: cleanURL,
             imageURL: imageURL,
@@ -223,21 +232,64 @@ struct RecipeParserCore {
         return ""
     }
 
+    /// Decodes common HTML entities in a string.
+    private static func decodeHTMLEntities(_ text: String) -> String {
+        var result = text
+        let entities: [(String, String)] = [
+            ("&quot;", "\""), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+            ("&apos;", "'"), ("&#39;", "'"), ("&#x27;", "'"),
+            ("&#x2F;", "/"), ("&#47;", "/"),
+            ("&nbsp;", " "), ("&#160;", " "),
+            ("&ndash;", "–"), ("&mdash;", "—"),
+            ("&lsquo;", "\u{2018}"), ("&rsquo;", "\u{2019}"),
+            ("&ldquo;", "\u{201C}"), ("&rdquo;", "\u{201D}"),
+            ("&hellip;", "…"),
+        ]
+        for (entity, replacement) in entities {
+            result = result.replacingOccurrences(of: entity, with: replacement)
+        }
+        // Decode numeric character references like &#8220;
+        if let regex = try? NSRegularExpression(pattern: #"&#(\d+);"#) {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = regex.matches(in: result, range: range).reversed()
+            for match in matches {
+                if let codeRange = Range(match.range(at: 1), in: result),
+                   let code = UInt32(result[codeRange]),
+                   let scalar = Unicode.Scalar(code) {
+                    let charRange = Range(match.range, in: result)!
+                    result.replaceSubrange(charRange, with: String(Character(scalar)))
+                }
+            }
+        }
+        return result
+    }
+
     /// Cleans up Instagram's og:description format.
-    /// Input often looks like: "123 likes, 5 comments - \"actual caption here\""
+    /// Input often looks like: "71K likes, 490 comments - maxiskitchen on January 12, 2025: &quot;Chipotle..."
     private static func cleanInstagramDescription(_ desc: String) -> String {
-        var text = desc
+        // First decode HTML entities
+        var text = decodeHTMLEntities(desc)
 
         // Remove the "N likes, N comments - " prefix pattern
+        // Handles suffixes like K, M (e.g., "71K likes") and date patterns
         if let regex = try? NSRegularExpression(
-            pattern: #"^[\d,.]+ likes?,?\s*[\d,.]+ comments?\s*[-–—]\s*"#,
+            pattern: #"^[\d,.]+[KkMm]?\s*likes?,?\s*[\d,.]+[KkMm]?\s*comments?\s*[-–—]\s*"#,
             options: .caseInsensitive
         ) {
             let range = NSRange(text.startIndex..., in: text)
             text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
         }
 
-        // Also handle: "N Likes, N Comments - Author on Instagram: \"caption\""
+        // Remove "username on Month DD, YYYY: " pattern
+        if let regex = try? NSRegularExpression(
+            pattern: #"^.*?\bon \w+ \d{1,2}, \d{4}:\s*"#,
+            options: .caseInsensitive
+        ) {
+            let range = NSRange(text.startIndex..., in: text)
+            text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+        }
+
+        // Also handle: "Author on Instagram: \"caption\""
         if let regex = try? NSRegularExpression(
             pattern: #"^.*?\bon Instagram:\s*"#,
             options: .caseInsensitive
@@ -257,7 +309,7 @@ struct RecipeParserCore {
     /// Cleans up the og:title from Instagram.
     /// Input looks like: "Username on Instagram: \"Recipe Title Here\""
     private static func cleanInstagramTitle(_ ogTitle: String) -> String {
-        var title = ogTitle
+        var title = decodeHTMLEntities(ogTitle)
 
         // Remove "Username on Instagram: " prefix
         if let regex = try? NSRegularExpression(
