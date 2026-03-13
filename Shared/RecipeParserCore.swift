@@ -342,6 +342,28 @@ struct RecipeParserCore {
 
     // MARK: - Instagram Caption Recipe Extraction
 
+    /// Strips the "Author on Instagram: \"caption\"" wrapper that the oEmbed API
+    /// sometimes returns in the `title` field.
+    static func stripInstagramOEmbedWrapper(_ text: String) -> String {
+        // Pattern: "Name on Instagram: \"actual caption\""
+        if let regex = try? NSRegularExpression(
+            pattern: #"^.{1,50}\bon Instagram:\s*"?"#,
+            options: .caseInsensitive
+        ) {
+            let range = NSRange(text.startIndex..., in: text)
+            let stripped = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+            if !stripped.isEmpty {
+                var result = stripped
+                // Remove trailing quote if the wrapper had an opening quote
+                if result.hasSuffix("\"") || result.hasSuffix("\u{201D}") {
+                    result = String(result.dropLast())
+                }
+                return result.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return text
+    }
+
     struct InstagramRecipeParts {
         var title: String = ""
         var ingredientGroups: [ParsedIngredientGroup] = []
@@ -526,6 +548,15 @@ struct RecipeParserCore {
                 continue
             }
 
+            // ── Detect note/modifier emoji lines (e.g. "🌱Vegan Modification: ...") ──
+            let noteEmojiPrefixes = ["🌱", "💡", "📝", "❗", "‼️", "⚠️"]
+            if noteEmojiPrefixes.contains(where: { stripped.hasPrefix($0) }) {
+                flushGroup(&currentGroupName, &currentGroupItems, &groups)
+                noteLines.append(stripped)
+                currentSection = .notes
+                continue
+            }
+
             // ── Detect numbered-emoji directions regardless of current section ──
             if isDirectionLine(stripped) {
                 // Flush any open ingredient group first
@@ -562,6 +593,22 @@ struct RecipeParserCore {
                 if let (p, c) = parseInstagramTimeInfo(stripped) {
                     prepDuration = p; cookDuration = c
                 }
+                continue
+            }
+
+            // ── Detect "Recipe serves N" → notes ──
+            if stripped.lowercased().hasPrefix("recipe serves") || stripped.lowercased().hasPrefix("serves ") {
+                flushGroup(&currentGroupName, &currentGroupItems, &groups)
+                noteLines.append(stripped)
+                currentSection = .notes
+                continue
+            }
+
+            // ── Skip promotional / boilerplate lines ──
+            let lower = stripped.lowercased()
+            if lower.contains("subscribe to my newsletter") || lower.contains("link in my bio")
+                || lower.contains("link in bio") || lower.contains("delivered to your inbox")
+                || lower.contains("printable pdf") {
                 continue
             }
 

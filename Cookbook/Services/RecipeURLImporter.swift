@@ -74,11 +74,15 @@ struct RecipeURLImporter {
             return nil
         }
 
-        let caption = json["title"] as? String ?? ""
+        var caption = json["title"] as? String ?? ""
         let authorName = json["author_name"] as? String ?? ""
         let thumbnailURL = json["thumbnail_url"] as? String
 
         guard !caption.isEmpty else { return nil }
+
+        // The oEmbed title sometimes includes an "Author on Instagram: \"caption\"" wrapper.
+        // Strip it so we parse only the actual caption text.
+        caption = RecipeParserCore.stripInstagramOEmbedWrapper(caption)
 
         let parsed = RecipeParserCore.parseInstagramCaption(caption)
 
