@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2B243B992F0B11D400840694"
-               BuildableName = "Cookbook.app"
+               BuildableName = "Cookbo.app"
                BlueprintName = "Cookbook"
                ReferencedContainer = "container:Cookbook.xcodeproj">
             </BuildableReference>
@@ -29,6 +29,19 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
+      <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "BA7F2D1B4F4CAADF7BC947F9"
+               BuildableName = "CookbookTests.xctest"
+               BlueprintName = "CookbookTests"
+               ReferencedContainer = "container:Cookbook.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -45,7 +58,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2B243B992F0B11D400840694"
-            BuildableName = "Cookbook.app"
+            BuildableName = "Cookbo.app"
             BlueprintName = "Cookbook"
             ReferencedContainer = "container:Cookbook.xcodeproj">
          </BuildableReference>
@@ -62,7 +75,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2B243B992F0B11D400840694"
-            BuildableName = "Cookbook.app"
+            BuildableName = "Cookbo.app"
             BlueprintName = "Cookbook"
             ReferencedContainer = "container:Cookbook.xcodeproj">
          </BuildableReference>

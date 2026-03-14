@@ -48,11 +48,89 @@ struct RecipeParser {
             throw ParseError.parsingFailed
         }
 
-        if let recipe = RecipeParserCore.parseRecipe(html: html, sourceURL: urlString) {
+        if var recipe = RecipeParserCore.parseRecipe(html: html, sourceURL: urlString) {
+            if RecipeParserCore.isInstagramURL(urlString), recipe.imageURL == nil {
+                recipe.imageURL = await fetchInstagramThumbnailURL(urlString: urlString)
+            }
             return recipe
         }
 
+        // For Instagram URLs, try the oEmbed API as a fallback
+        if RecipeParserCore.isInstagramURL(urlString) {
+            if let recipe = await fetchInstagramOEmbed(urlString: urlString, html: html) {
+                return recipe
+            }
+        }
+
         throw ParseError.parsingFailed
+    }
+
+    /// Fetches only the thumbnail_url from Instagram's oEmbed endpoint.
+    private static func fetchInstagramThumbnailURL(urlString: String) async -> String? {
+        guard let encoded = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let oembedURL = URL(string: "https://www.instagram.com/api/v1/oembed/?url=\(encoded)"),
+              let (data, _) = try? await URLSession.shared.data(from: oembedURL),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return json["thumbnail_url"] as? String
+    }
+
+    /// Fallback: use Instagram's oEmbed endpoint to get post metadata.
+    private static func fetchInstagramOEmbed(urlString: String, html: String) async -> ParsedRecipe? {
+        guard let encoded = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let oembedURL = URL(string: "https://www.instagram.com/api/v1/oembed/?url=\(encoded)") else {
+            return nil
+        }
+
+        guard let (data, _) = try? await URLSession.shared.data(from: oembedURL),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        var caption = json["title"] as? String ?? ""
+        let authorName = json["author_name"] as? String ?? ""
+        let thumbnailURL = json["thumbnail_url"] as? String
+
+        guard !caption.isEmpty else { return nil }
+
+        // The oEmbed title sometimes includes an "Author on Instagram: \"caption\"" wrapper.
+        // Strip it so we parse only the actual caption text.
+        caption = RecipeParserCore.stripInstagramOEmbedWrapper(caption)
+
+        let parsed = RecipeParserCore.parseInstagramCaption(caption)
+
+        let title: String
+        if !parsed.title.isEmpty {
+            title = parsed.title
+        } else if !authorName.isEmpty {
+            title = "Recipe by \(authorName)"
+        } else {
+            return nil
+        }
+
+        let imageURL = thumbnailURL ?? RecipeParserCore.extractMetaContent(html: html, property: "og:image")
+
+        // If structured parsing found sections, use them; otherwise store the
+        // full caption in notes so the user still gets the recipe text.
+        let notes: String
+        if parsed.ingredientGroups.isEmpty && parsed.directions.isEmpty {
+            notes = caption
+        } else {
+            notes = parsed.notes
+        }
+
+        return ParsedRecipe(
+            title: title,
+            ingredientGroups: parsed.ingredientGroups.isEmpty ? nil : parsed.ingredientGroups,
+            ingredients: [],
+            directions: parsed.directions,
+            sourceURL: urlString,
+            imageURL: imageURL,
+            prepDuration: parsed.prepDuration,
+            cookDuration: parsed.cookDuration,
+            notes: notes
+        )
     }
 
     static func formatDuration(_ seconds: TimeInterval) -> String? {

@@ -9,10 +9,20 @@
 /* Begin PBXBuildFile section */
 		2B720F522F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */; };
 		2B720F532F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */; };
+		7B2B729AD4980D364B7C0C6E /* InstagramParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC14C824BE658B885EC73CA4 /* InstagramParserTests.swift */; };
 		CC000000000000000000000E /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000001 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		F0B8B881D22C2B413372F937 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 543D3101572A923451D77D4D /* Foundation.framework */; };
+		F8F63616CBF0C40478ED1536 /* RecipeParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		4188FA185258D496A5E9D820 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2B243B922F0B11D400840694 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2B243B992F0B11D400840694;
+			remoteInfo = Cookbook;
+		};
 		CC000000000000000000000A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2B243B922F0B11D400840694 /* Project object */;
@@ -39,6 +49,9 @@
 /* Begin PBXFileReference section */
 		2B243B9A2F0B11D400840694 /* Cookbo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cookbo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeParserCore.swift; sourceTree = "<group>"; };
+		543D3101572A923451D77D4D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		99965210B2E197AAC6702F05 /* CookbookTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CookbookTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BC14C824BE658B885EC73CA4 /* InstagramParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InstagramParserTests.swift; sourceTree = "<group>"; };
 		CC0000000000000000000001 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -79,6 +92,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		2A4B164AA9F6C7C89D2F59E2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F0B8B881D22C2B413372F937 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2B243B972F0B11D400840694 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -96,6 +117,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		02953FCAFBB4A15412C60792 /* CookbookTests */ = {
+			isa = PBXGroup;
+			children = (
+				BC14C824BE658B885EC73CA4 /* InstagramParserTests.swift */,
+			);
+			name = CookbookTests;
+			path = CookbookTests;
+			sourceTree = "<group>";
+		};
 		2B243B912F0B11D400840694 = {
 			isa = PBXGroup;
 			children = (
@@ -103,6 +133,8 @@
 				CC0000000000000000000002 /* ShareExtension */,
 				2B243B9B2F0B11D400840694 /* Products */,
 				2B720F512F4D7DC60069FE07 /* Shared */,
+				85FA602B6E03982D7A8725CB /* Frameworks */,
+				02953FCAFBB4A15412C60792 /* CookbookTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -111,6 +143,7 @@
 			children = (
 				2B243B9A2F0B11D400840694 /* Cookbo.app */,
 				CC0000000000000000000001 /* ShareExtension.appex */,
+				99965210B2E197AAC6702F05 /* CookbookTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -121,6 +154,22 @@
 				2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		7A13CD053A0738C2C64595FB /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				543D3101572A923451D77D4D /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		85FA602B6E03982D7A8725CB /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				7A13CD053A0738C2C64595FB /* iOS */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -144,11 +193,27 @@
 				2B243B9C2F0B11D400840694 /* Cookbook */,
 			);
 			name = Cookbook;
-			packageProductDependencies = (
-			);
 			productName = Cookbook;
 			productReference = 2B243B9A2F0B11D400840694 /* Cookbo.app */;
 			productType = "com.apple.product-type.application";
+		};
+		BA7F2D1B4F4CAADF7BC947F9 /* CookbookTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E2C513F79B4879AF2EE932BB /* Build configuration list for PBXNativeTarget "CookbookTests" */;
+			buildPhases = (
+				F8F58975B5A59498B83F272B /* Sources */,
+				2A4B164AA9F6C7C89D2F59E2 /* Frameworks */,
+				49B8FB5621B579E12A5F2C0F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B48902B93CE14A4B25F7F75E /* PBXTargetDependency */,
+			);
+			name = CookbookTests;
+			productName = CookbookTests;
+			productReference = 99965210B2E197AAC6702F05 /* CookbookTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 		CC0000000000000000000003 /* ShareExtension */ = {
 			isa = PBXNativeTarget;
@@ -166,8 +231,6 @@
 				CC0000000000000000000002 /* ShareExtension */,
 			);
 			name = ShareExtension;
-			packageProductDependencies = (
-			);
 			productName = ShareExtension;
 			productReference = CC0000000000000000000001 /* ShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -206,12 +269,20 @@
 			targets = (
 				2B243B992F0B11D400840694 /* Cookbook */,
 				CC0000000000000000000003 /* ShareExtension */,
+				BA7F2D1B4F4CAADF7BC947F9 /* CookbookTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		2B243B982F0B11D400840694 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		49B8FB5621B579E12A5F2C0F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -244,9 +315,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F8F58975B5A59498B83F272B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B2B729AD4980D364B7C0C6E /* InstagramParserTests.swift in Sources */,
+				F8F63616CBF0C40478ED1536 /* RecipeParserCore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		B48902B93CE14A4B25F7F75E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Cookbook;
+			target = 2B243B992F0B11D400840694 /* Cookbook */;
+			targetProxy = 4188FA185258D496A5E9D820 /* PBXContainerItemProxy */;
+		};
 		CC000000000000000000000B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = CC0000000000000000000003 /* ShareExtension */;
@@ -497,6 +583,28 @@
 			};
 			name = Release;
 		};
+		9711C0B6E1F804B0B9610AEF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.CookbookTests;
+				PRODUCT_NAME = CookbookTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cookbo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cookbo";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		CC0000000000000000000007 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -559,6 +667,27 @@
 			};
 			name = Release;
 		};
+		F195A2A068AA9954B105F223 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.CookbookTests;
+				PRODUCT_NAME = CookbookTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cookbo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cookbo";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -585,6 +714,15 @@
 			buildConfigurations = (
 				CC0000000000000000000007 /* Debug */,
 				CC0000000000000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E2C513F79B4879AF2EE932BB /* Build configuration list for PBXNativeTarget "CookbookTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9711C0B6E1F804B0B9610AEF /* Release */,
+				F195A2A068AA9954B105F223 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

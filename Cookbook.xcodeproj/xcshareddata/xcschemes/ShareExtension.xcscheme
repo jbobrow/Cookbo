@@ -31,7 +31,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2B243B992F0B11D400840694"
-               BuildableName = "Cookbook.app"
+               BuildableName = "Cookbo.app"
                BlueprintName = "Cookbook"
                ReferencedContainer = "container:Cookbook.xcodeproj">
             </BuildableReference>
@@ -62,7 +62,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2B243B992F0B11D400840694"
-            BuildableName = "Cookbook.app"
+            BuildableName = "Cookbo.app"
             BlueprintName = "Cookbook"
             ReferencedContainer = "container:Cookbook.xcodeproj">
          </BuildableReference>
@@ -81,7 +81,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2B243B992F0B11D400840694"
-            BuildableName = "Cookbook.app"
+            BuildableName = "Cookbo.app"
             BlueprintName = "Cookbook"
             ReferencedContainer = "container:Cookbook.xcodeproj">
          </BuildableReference>
