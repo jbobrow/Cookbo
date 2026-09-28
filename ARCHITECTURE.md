@@ -63,9 +63,9 @@ The Cookbook app follows a clean MVVM (Model-View-ViewModel) architecture using 
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  iCloud Drive / Documents / Recipes /                       │
-│         ├── [UUID-1].json                                   │
-│         ├── [UUID-2].json                                   │
-│         └── [UUID-3].json                                   │
+│         ├── banana-bread-3f2504.md                          │
+│         ├── chicken-tikka-masala-a81b2c.md                  │
+│         └── weeknight-pasta-0c9e77.md                       │
 │                                                             │
 │  Shareable Format:                                          │
 │         Recipe_Name.cookbook.json                           │
@@ -319,10 +319,11 @@ UI updates automatically
 ### File Naming Convention
 
 **Storage (iCloud):**
-- Files named using UUIDs: `[UUID].json`
-- Ensures uniqueness
-- Prevents conflicts
-- Platform independent
+- Files named `<kebab-case-title>-<hash>.md`, e.g. `chipotle-chicken-burrito-bowls-3f2504.md`
+- Human-legible when browsing the folder in Finder / Files
+- The 6-character hash is the start of the recipe's UUID, so two recipes with the same title never collide and the name is stable across devices
+- The recipe's identity is the `id` in the file's front matter, not the filename; renaming the title just renames the file
+- Legacy `[UUID].json` and `[UUID].md` files are migrated to the new name on load (see `RecipeFileNaming`)
 
 **Sharing (Export):**
 - Files named with recipe title: `Recipe_Title.cookbook.json`

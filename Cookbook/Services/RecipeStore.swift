@@ -429,22 +429,45 @@ class RecipeStore: ObservableObject {
             var loadedIDs: Set<UUID> = []
 
             // Load markdown files (current format)
+            var parsedMarkdown: [(fileURL: URL, recipe: Recipe)] = []
             for fileURL in mdFiles {
                 do {
                     let content = try String(contentsOf: fileURL, encoding: .utf8)
-                    if var recipe = RecipeMarkdownSerializer.deserialize(content) {
-                        // Load image from file if available
-                        if let imageName = recipe.imageName {
-                            recipe.imageData = loadImageFile(fileName: imageName)
-                        }
-                        loadedRecipes.append(recipe)
-                        loadedIDs.insert(recipe.id)
+                    if let recipe = RecipeMarkdownSerializer.deserialize(content) {
+                        parsedMarkdown.append((fileURL, recipe))
                     }
                 } catch {
                     #if DEBUG
                     print("Error loading recipe from \(fileURL.lastPathComponent): \(error)")
                     #endif
                 }
+            }
+
+            // If a recipe exists under both its current name and a stale one, prefer the current one
+            parsedMarkdown.sort { lhs, rhs in
+                let lhsMatches = lhs.fileURL.lastPathComponent == recipeFileName(for: lhs.recipe)
+                let rhsMatches = rhs.fileURL.lastPathComponent == recipeFileName(for: rhs.recipe)
+                return lhsMatches && !rhsMatches
+            }
+
+            for (fileURL, parsedRecipe) in parsedMarkdown {
+                var recipe = parsedRecipe
+
+                // Remove duplicates (a stale-title or legacy-named copy of an already-loaded recipe)
+                guard !loadedIDs.contains(recipe.id) else {
+                    try? fileManager.removeItem(at: fileURL)
+                    continue
+                }
+
+                // Migration: rename legacy `<UUID>.md` (or stale-title) files to `<title>-<hash>.md`
+                renameIfNeeded(fileURL, for: recipe)
+
+                // Load image from file if available
+                if let imageName = recipe.imageName {
+                    recipe.imageData = loadImageFile(fileName: imageName)
+                }
+                loadedRecipes.append(recipe)
+                loadedIDs.insert(recipe.id)
             }
 
             // Migrate legacy JSON files
@@ -470,7 +493,7 @@ class RecipeStore: ObservableObject {
                     }
 
                     // Write as markdown
-                    let mdURL = url.appendingPathComponent("\(recipe.id.uuidString).md")
+                    let mdURL = url.appendingPathComponent(recipeFileName(for: recipe))
                     let markdown = RecipeMarkdownSerializer.serialize(recipe)
                     try markdown.write(to: mdURL, atomically: true, encoding: .utf8)
 
@@ -505,7 +528,7 @@ class RecipeStore: ObservableObject {
     func saveRecipe(_ recipe: Recipe) {
         guard let url = iCloudURL else { return }
 
-        let fileURL = url.appendingPathComponent("\(recipe.id.uuidString).md")
+        let fileURL = url.appendingPathComponent(recipeFileName(for: recipe))
 
         do {
             var recipeToSave = recipe
@@ -521,10 +544,10 @@ class RecipeStore: ObservableObject {
             let markdown = RecipeMarkdownSerializer.serialize(recipeToSave)
             try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
 
-            // Remove legacy JSON file if it exists
-            let jsonURL = url.appendingPathComponent("\(recipe.id.uuidString).json")
-            if fileManager.fileExists(atPath: jsonURL.path) {
-                try? fileManager.removeItem(at: jsonURL)
+            // Remove any other files for this recipe: a legacy `<UUID>.json`/`<UUID>.md`,
+            // or a `.md` written under the previous title
+            for staleURL in recipeFileURLs(for: recipe.id) where staleURL.lastPathComponent != fileURL.lastPathComponent {
+                try? fileManager.removeItem(at: staleURL)
             }
 
             // Keep imageData in the in-memory copy
@@ -545,15 +568,12 @@ class RecipeStore: ObservableObject {
     }
     
     func deleteRecipe(_ recipe: Recipe) {
-        guard let url = iCloudURL else { return }
+        guard iCloudURL != nil else { return }
 
-        let mdURL = url.appendingPathComponent("\(recipe.id.uuidString).md")
-        let jsonURL = url.appendingPathComponent("\(recipe.id.uuidString).json")
-
-        // Remove markdown file (current format)
-        try? fileManager.removeItem(at: mdURL)
-        // Remove legacy JSON file if it still exists
-        try? fileManager.removeItem(at: jsonURL)
+        // Remove the markdown file plus any legacy JSON or stale-title copies
+        for fileURL in recipeFileURLs(for: recipe.id) {
+            try? fileManager.removeItem(at: fileURL)
+        }
 
         // Also remove the image file
         if let imageName = recipe.imageName {
@@ -566,6 +586,47 @@ class RecipeStore: ObservableObject {
         var updatedRecipe = recipe
         updatedRecipe.datesCooked.append(Date())
         saveRecipe(updatedRecipe)
+    }
+
+    // MARK: - Recipe File Naming
+
+    /// Human-legible filename for a recipe: `<kebab-case-title>-<hash>.md`
+    private func recipeFileName(for recipe: Recipe) -> String {
+        RecipeFileNaming.fileName(title: recipe.title, id: recipe.id)
+    }
+
+    /// All `.md`/`.json` files in the Recipes folder that belong to this recipe, in any naming format.
+    private func recipeFileURLs(for id: UUID) -> [URL] {
+        guard let url = iCloudURL,
+              let files = try? fileManager.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: nil,
+                options: .skipsHiddenFiles
+              ) else { return [] }
+
+        let hash = RecipeFileNaming.shortHash(for: id)
+        return files.filter {
+            ($0.pathExtension == "md" || $0.pathExtension == "json")
+                && RecipeFileNaming.shortHash(fromFileName: $0.lastPathComponent) == hash
+        }
+    }
+
+    /// Renames a recipe file to match the current naming convention, if it doesn't already.
+    private func renameIfNeeded(_ fileURL: URL, for recipe: Recipe) {
+        let expectedName = recipeFileName(for: recipe)
+        guard fileURL.lastPathComponent != expectedName else { return }
+
+        let destination = fileURL.deletingLastPathComponent().appendingPathComponent(expectedName)
+        // Another device may have already renamed it and synced the result; don't clobber it
+        guard !fileManager.fileExists(atPath: destination.path) else { return }
+
+        do {
+            try fileManager.moveItem(at: fileURL, to: destination)
+        } catch {
+            #if DEBUG
+            print("Error renaming \(fileURL.lastPathComponent) to \(expectedName): \(error)")
+            #endif
+        }
     }
 
     // MARK: - Image File Management
@@ -685,8 +746,10 @@ class RecipeStore: ObservableObject {
                 options: .skipsHiddenFiles
             ).filter { $0.pathExtension == "md" || $0.pathExtension == "json" }
 
-            // Deduplicate by UUID stem (a recipe may exist as both .json and .md during migration)
-            let uniqueIDs = Set(fileURLs.map { $0.deletingPathExtension().lastPathComponent })
+            // Deduplicate by recipe hash (a recipe may exist as both .json and .md during migration)
+            let uniqueIDs = Set(fileURLs.map {
+                RecipeFileNaming.shortHash(fromFileName: $0.lastPathComponent) ?? $0.lastPathComponent
+            })
             return uniqueIDs.count
         } catch {
             return 0
