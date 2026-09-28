@@ -90,6 +90,8 @@ struct CookbookSwitcherView: View {
                     }
                     #endif
                 }
+
+                AboutSection()
             }
             #if os(macOS)
             .frame(minWidth: 400, minHeight: 300)
@@ -163,6 +165,71 @@ struct CookbookSwitcherView: View {
             picker.show(relativeTo: .zero, of: view, preferredEdge: .minY)
         }
         #endif
+    }
+}
+
+/// A short "what this app is" section at the bottom of the cookbooks list.
+struct AboutSection: View {
+    @EnvironmentObject var store: RecipeStore
+
+    private let compatibleSites = URL(string: "https://cookbo.app/compatible-sites")!
+    private let support = URL(string: "https://cookbo.app/support")!
+    private let privacy = URL(string: "https://cookbo.app/privacy")!
+
+    var body: some View {
+        Section {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "book.closed.fill")
+                    .font(.title2)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Cookbo")
+                        .font(.headline)
+                    Text("Save recipes from anywhere, cook without losing your place, and keep them as plain Markdown files you own.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(storageDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
+            }
+            .padding(.vertical, 4)
+
+            Link(destination: compatibleSites) {
+                Label("Sites You Can Import From", systemImage: "globe")
+            }
+            Link(destination: support) {
+                Label("Support", systemImage: "questionmark.circle")
+            }
+            Link(destination: privacy) {
+                Label("Privacy Policy", systemImage: "hand.raised")
+            }
+        } header: {
+            Text("About")
+        } footer: {
+            Text("\(appVersion) · cookbo.app")
+        }
+    }
+
+    private var storageDescription: String {
+        if store.useLocalStorage || !store.isICloudAvailable {
+            return "Your recipes are stored on this device."
+        }
+        return "Your recipes sync across your devices through iCloud Drive."
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+
+        guard let version else { return "Cookbo" }
+        guard let build, !build.isEmpty else { return "Version \(version)" }
+        return "Version \(version) (\(build))"
     }
 }
 
