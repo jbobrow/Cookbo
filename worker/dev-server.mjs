@@ -1,14 +1,16 @@
-// Local preview: serves ../docs and mounts the Worker at /api/import, so the
-// site and its live import can be tried together without deploying.
+// Local preview: serves ../docs and mounts the import service at /api/import, so
+// the site and its live import can be tried together without deploying.
 //   node dev-server.mjs   →   http://localhost:8787
 
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import worker from './src/index.js';
+import { createHandler } from './src/handler.js';
+import { send, sendError, toRequest } from './src/node-adapter.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
+const handle = createHandler();
 const ROOT = resolve(fileURLToPath(new URL('../docs', import.meta.url)));
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -19,10 +21,11 @@ createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
   if (url.pathname === '/api/import') {
-    const request = new Request(url, { headers: { Origin: `http://localhost:${PORT}` } });
-    const response = await worker.fetch(request, {}, {});
-    res.writeHead(response.status, Object.fromEntries(response.headers));
-    res.end(Buffer.from(await response.arrayBuffer()));
+    try {
+      await send(res, await handle(await toRequest(req)));
+    } catch (error) {
+      sendError(res, error.status ?? 500);
+    }
     return;
   }
 

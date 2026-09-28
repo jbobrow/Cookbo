@@ -626,7 +626,11 @@ import { recipeFileName, recipeMarkdown } from './recipe-file.js';
 
     let data;
     try {
-      const response = await fetch(`${endpoint}?url=${encodeURIComponent(url.href)}`, {
+      // In the body, not the query string, so the link never appears in request logs
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url.href }),
         signal: AbortSignal.timeout(15_000),
       });
       data = await response.json().catch(() => ({}));

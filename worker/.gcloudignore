@@ -1,0 +1,6 @@
+.gcloudignore
+.dockerignore
+test/
+dev-server.mjs
+README.md
+node_modules/

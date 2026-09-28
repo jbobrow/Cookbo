@@ -2,9 +2,10 @@
   "name": "cookbo-import",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=22" },
   "scripts": {
-    "test": "node --test test/*.test.js",
+    "start": "node src/server.js",
     "dev": "node dev-server.mjs",
-    "deploy": "npx wrangler deploy"
+    "test": "node --test test/*.test.js"
   }
 }
