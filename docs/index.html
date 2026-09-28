@@ -53,14 +53,18 @@
     /* ─── Hero ─── */
 
     .app-icon {
-      width: 56px;
-      height: 56px;
+      width: 84px;
+      height: 84px;
       border-radius: 22.5%;
-      box-shadow: 0 3px 10px rgba(22, 23, 27, 0.16);
+      box-shadow: 0 4px 14px rgba(22, 23, 27, 0.16);
     }
 
+    /* The name tucks up over the icon's bottom edge. The letters' tops sit about
+       .18em below the top of the h1's box, so -.3em puts the icon's edge .12em
+       below them. The h1 paints in front, so no letter is covered. */
     h1 {
-      margin: 14px 0 0;
+      position: relative;
+      margin: -.3em 0 0;
       font-size: 56px;
       font-weight: 700;
       letter-spacing: -1.12px;
@@ -764,6 +768,7 @@
     }
 
     @media (max-width: 560px) {
+      .app-icon { width: 72px; height: 72px; }
       .produce { width: 2.1em; }
       .produce .lemon, .produce .broccoli { display: none; }
     }
