@@ -14,7 +14,9 @@ struct RecipeListView: View {
     @State private var recipesToDelete: IndexSet?
     @State private var showingDeleteConfirmation = false
     @State private var isSearching = false
+    @State private var showingWelcome = false
     @AppStorage("recipeViewMode") private var viewMode: RecipeViewMode = .grid
+    @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
     #if os(macOS)
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
     #endif
@@ -171,10 +173,27 @@ struct RecipeListView: View {
 
     private var currentView: some View {
         Group {
-            if isGridCapable && viewMode == .grid {
+            if store.recipes.isEmpty {
+                emptyState
+            } else if isGridCapable && viewMode == .grid {
                 recipeGrid
             } else {
                 recipeList
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label("No Recipes Yet", systemImage: "book.closed")
+        } description: {
+            Text("Add a recipe by hand, import one from a link, or start with a sample.")
+        } actions: {
+            VStack(spacing: 12) {
+                Button("New Recipe") { showingAddRecipe = true }
+                    .buttonStyle(.borderedProminent)
+                Button("Add from URL") { showingURLImport = true }
+                Button("Add Sample Recipe") { store.addSampleRecipe() }
             }
         }
     }
@@ -252,6 +271,12 @@ struct RecipeListView: View {
         .sheet(isPresented: $showingCookbookSwitcher) {
             CookbookSwitcherView()
         }
+        .sheet(isPresented: $showingWelcome) {
+            WelcomeView(onFinish: { hasSeenWelcome = true })
+        }
+        .onAppear(perform: showWelcomeIfNeeded)
+        .onChange(of: store.isICloudAvailable) { _, _ in showWelcomeIfNeeded() }
+        .onChange(of: store.useLocalStorage) { _, _ in showWelcomeIfNeeded() }
         .onChange(of: store.shouldShowNewRecipe) { oldValue, newValue in
             if newValue {
                 showingAddRecipe = true
@@ -406,6 +431,23 @@ struct RecipeListView: View {
         #endif
     }
 
+    /// Shows onboarding once, on the first launch of an empty cookbook, and
+    /// seeds the sample recipe so no one starts out staring at an empty shelf.
+    /// Skipped for anyone who already has recipes, and until storage is ready
+    /// (the iCloud setup screen comes first).
+    private func showWelcomeIfNeeded() {
+        guard !hasSeenWelcome else { return }
+        guard store.isICloudAvailable || store.useLocalStorage else { return }
+
+        if store.recipes.isEmpty {
+            store.addSampleRecipe()
+            showingWelcome = true
+        } else {
+            // An existing cookbook, so there's nothing to introduce
+            hasSeenWelcome = true
+        }
+    }
+
     private var deleteCount: Int {
         recipesToDelete?.count ?? 0
     }
@@ -413,7 +455,9 @@ struct RecipeListView: View {
     private var deleteMessage: String {
         guard let offsets = recipesToDelete else { return "" }
 
-        if offsets.count == 1, let index = offsets.first {
+        // Bounds-checked: body can be recomputed after the recipes are gone but
+        // before the alert finishes dismissing
+        if offsets.count == 1, let index = offsets.first, filteredRecipes.indices.contains(index) {
             let recipe = filteredRecipes[index]
             return "Are you sure you want to delete '\(recipe.title)'? This action cannot be undone."
         } else {
@@ -468,12 +512,14 @@ struct RecipeListView: View {
     private func confirmDelete() {
         guard let offsets = recipesToDelete else { return }
 
-        offsets.forEach { index in
-            let recipe = filteredRecipes[index]
-            store.deleteRecipe(recipe)
+        // Resolve the recipes before deleting any of them: each delete shifts
+        // the indices that the remaining offsets refer to
+        let targets = offsets.compactMap { index in
+            filteredRecipes.indices.contains(index) ? filteredRecipes[index] : nil
         }
 
         recipesToDelete = nil
+        targets.forEach { store.deleteRecipe($0) }
     }
     
     private func shareRecipe(_ recipe: Recipe) {

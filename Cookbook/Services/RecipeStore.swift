@@ -588,6 +588,19 @@ class RecipeStore: ObservableObject {
         saveRecipe(updatedRecipe)
     }
 
+    // MARK: - Sample Recipe
+
+    /// Adds the sample recipe, for a cookbook that has never had one.
+    func addSampleRecipe() {
+        saveRecipe(SampleRecipe.make())
+
+        // Setup may have a loadRecipes() still in flight: it read the folder
+        // before the sample existed, and its result would replace the in-memory
+        // list and drop it again. Re-reading now queues a newer snapshot behind
+        // that one, so the sample survives either ordering.
+        loadRecipes()
+    }
+
     // MARK: - Recipe File Naming
 
     /// Human-legible filename for a recipe: `<kebab-case-title>-<hash>.md`

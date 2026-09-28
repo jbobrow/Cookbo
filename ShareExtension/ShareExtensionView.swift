@@ -242,7 +242,7 @@ struct ShareExtensionView: View {
                 viewState = .saved
             }
         } label: {
-            Label("Save to Cookbook", systemImage: "book.closed")
+            Label("Save to Cookbo", systemImage: "book.closed")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
@@ -283,9 +283,9 @@ struct ShareExtensionView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.green)
-            Text("Saved to Cookbook!")
+            Text("Saved to Cookbo!")
                 .font(.headline)
-            Text("Open the Cookbook app to see your recipe.")
+            Text("Open the Cookbo app to see your recipe.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

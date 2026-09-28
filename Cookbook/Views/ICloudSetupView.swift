@@ -18,7 +18,7 @@ struct ICloudSetupView: View {
                 .fontWeight(.bold)
 
             // Message
-            Text("Cookbook requires iCloud Drive to sync your recipes across devices.")
+            Text("Cookbo requires iCloud Drive to sync your recipes across devices.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -26,19 +26,19 @@ struct ICloudSetupView: View {
 
             // Instructions
             VStack(alignment: .leading, spacing: 12) {
-                Text("To use Cookbook:")
+                Text("To use Cookbo:")
                     .font(.headline)
 
                 #if os(iOS)
                 InstructionRow(number: 1, text: "Open the Settings app")
                 InstructionRow(number: 2, text: "Sign in with your Apple ID")
                 InstructionRow(number: 3, text: "Enable iCloud Drive")
-                InstructionRow(number: 4, text: "Return to Cookbook")
+                InstructionRow(number: 4, text: "Return to Cookbo")
                 #else
                 InstructionRow(number: 1, text: "Open System Settings")
                 InstructionRow(number: 2, text: "Sign in with your Apple ID")
                 InstructionRow(number: 3, text: "Enable iCloud Drive")
-                InstructionRow(number: 4, text: "Return to Cookbook")
+                InstructionRow(number: 4, text: "Return to Cookbo")
                 #endif
             }
             .padding(24)
