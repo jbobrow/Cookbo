@@ -12,6 +12,10 @@ enum SampleRecipe {
 
     static let sourceURL = "https://cooking.nytimes.com/recipes/1025808-caramelized-tomato-and-shallot-soup"
 
+    /// Fixed, so that if two devices ever both seed the sample into the same
+    /// iCloud cookbook, the copies are one recipe rather than a duplicate.
+    static let id = UUID(uuidString: "C00CB0DE-5A3F-4E1C-9B7A-7E0A7010500B")!
+
     private static let imageResource = "sample-recipe"
 
     /// The photo shipped in the app bundle. Nil if the resource is ever missing,
@@ -25,6 +29,7 @@ enum SampleRecipe {
 
     static func make() -> Recipe {
         Recipe(
+            id: id,
             title: title,
             imageData: imageData,
             ingredients: [

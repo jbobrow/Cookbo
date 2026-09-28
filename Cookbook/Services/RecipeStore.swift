@@ -712,6 +712,18 @@ class RecipeStore: ObservableObject {
     // MARK: - Sample Recipe
 
     /// Adds the sample recipe, for a cookbook that has never had one.
+    /// Whether the current cookbook's Recipes folder has any recipe files on
+    /// disk. Reads the folder rather than `recipes`, which may not be loaded
+    /// yet, and counts iCloud's hidden placeholders for files that haven't
+    /// downloaded, as on a second device that's still syncing.
+    var hasRecipeFiles: Bool {
+        guard let url = iCloudURL,
+              let names = try? fileManager.contentsOfDirectory(atPath: url.path) else { return false }
+        return names.contains { name in
+            name.hasSuffix(".md") || name.hasSuffix(".json") || name.hasSuffix(".icloud")
+        }
+    }
+
     func addSampleRecipe() {
         saveRecipe(SampleRecipe.make())
 

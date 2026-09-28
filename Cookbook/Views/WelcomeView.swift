@@ -13,8 +13,8 @@ struct WelcomeView: View {
         ScrollView {
             VStack(spacing: 0) {
                 header
-                    .padding(.top, 48)
-                    .padding(.bottom, 40)
+                    .padding(.top, 32)
+                    .padding(.bottom, 36)
 
                 VStack(alignment: .leading, spacing: 28) {
                     ForEach(features) { feature in
@@ -26,7 +26,6 @@ struct WelcomeView: View {
                 Spacer(minLength: 40)
 
                 actions
-                    .padding(.top, 40)
             }
             .frame(maxWidth: 420)
             .frame(maxWidth: .infinity)

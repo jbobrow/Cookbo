@@ -596,7 +596,9 @@ struct RecipeListView: View {
         guard !hasSeenWelcome else { return }
         guard store.isICloudAvailable || store.useLocalStorage else { return }
 
-        if store.recipes.isEmpty {
+        // Checks the folder, not store.recipes, which can still be loading at
+        // launch; an empty list then would seed a second sample recipe
+        if store.recipes.isEmpty && !store.hasRecipeFiles {
             store.addSampleRecipe()
             showingWelcome = true
         } else {

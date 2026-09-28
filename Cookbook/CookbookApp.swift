@@ -46,8 +46,10 @@ struct CookbookApp: App {
                 checkForSharedURL()
             }
         }
+        // Mac only. On iOS an empty .commands {} builds an EmptyView, which only
+        // works as Commands from iOS 27, and the app supports older versions.
+        #if os(macOS)
         .commands {
-            #if os(macOS)
             CommandGroup(replacing: .newItem) {
                 Button("New Recipe") {
                     recipeStore.shouldShowNewRecipe = true
@@ -76,8 +78,8 @@ struct CookbookApp: App {
                 }
                 .keyboardShortcut("0", modifiers: .command)
             }
-            #endif
         }
+        #endif
 
         #if os(macOS)
         Settings {
@@ -137,7 +139,7 @@ struct CookbookApp: App {
             let sections = parsed.ingredientGroups.map { group in
                 IngredientSection(name: group.name, ingredients: group.ingredients.map { Ingredient(text: $0) })
             }
-            var recipe = Recipe(
+            let recipe = Recipe(
                 title: parsed.title,
                 ingredientSections: sections,
                 directions: parsed.directions.enumerated().map { Direction(text: $1, order: $0 + 1) },
