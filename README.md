@@ -243,19 +243,18 @@ Add these keys if needed:
 
 **iCloud Drive Path:**
 ```
-iCloud Drive/Cookbook/Cookbooks/
-├── [CookbookID-1]/
-│   ├── cookbook.json           # Cookbook metadata
-│   ├── categories.json         # Category definitions
+iCloud Drive/Cookbo/Cookbooks/
+├── my-cookbook-0eb471/            # <cookbook name>-<short id>
+│   ├── cookbook.json              # Cookbook metadata
+│   ├── categories.json            # Category definitions
+│   ├── weekplan.json              # This Week review state
+│   ├── Images/
+│   │   └── [RecipeID].jpg
 │   └── Recipes/
-│       ├── [RecipeID-1].json
-│       ├── [RecipeID-2].json
-│       └── [RecipeID-3].json
-└── [CookbookID-2]/
-    ├── cookbook.json
-    ├── categories.json
-    └── Recipes/
-        └── ...
+│       ├── banana-bread-3f2504.md     # <recipe title>-<short id>, Markdown
+│       └── weeknight-pasta-0c9e77.md
+└── family-recipes-5a391c/
+    └── ...
 ```
 
 **Local Storage Path:**
@@ -268,7 +267,7 @@ Documents/Cookbooks/
 
 **iCloud Drive (Default):**
 - Automatic synchronization across all your devices
-- Files visible in the Cookbook folder in iCloud Drive
+- Files visible in the Cookbo folder in iCloud Drive
 - Changes propagate when devices are online
 - External file changes are detected and reloaded
 - Conflicts handled by last-write-wins

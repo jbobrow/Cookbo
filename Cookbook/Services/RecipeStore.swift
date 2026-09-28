@@ -30,8 +30,8 @@ class RecipeStore: ObservableObject {
         } else {
             // Use visible iCloud Drive Documents folder
             // The Documents folder inside the ubiquity container is visible in iCloud Drive
-            // On iOS: appears as "iCloud Drive/Cookbook/Cookbooks"
-            // On macOS: appears as "iCloud Drive/Cookbook/Cookbooks"
+            // On iOS: appears as "iCloud Drive/Cookbo/Cookbooks"
+            // On macOS: appears as "iCloud Drive/Cookbo/Cookbooks"
             guard let iCloudDriveURL = fileManager.url(forUbiquityContainerIdentifier: nil) else {
                 return nil
             }
