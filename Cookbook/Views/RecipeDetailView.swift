@@ -353,6 +353,14 @@ struct RecipeDetailView: View {
                         Label("Share Recipe", systemImage: "square.and.arrow.up")
                     }
 
+                    Button(action: toggleThisWeek) {
+                        if recipe.isInThisWeek {
+                            Label("Remove from This Week", systemImage: "calendar.badge.minus")
+                        } else {
+                            Label("Add to This Week", systemImage: "calendar.badge.plus")
+                        }
+                    }
+
                     Menu {
                         Button(action: {
                             recipe.categoryID = nil
@@ -401,6 +409,7 @@ struct RecipeDetailView: View {
                 }
             }
         }
+        .onAppear { store.markViewed(recipe) }
         .sheet(isPresented: $showingEditSheet) {
             RecipeEditView(recipe: recipe)
         }
@@ -477,6 +486,11 @@ struct RecipeDetailView: View {
         }
     }
     
+    private func toggleThisWeek() {
+        recipe.isInThisWeek.toggle()
+        store.setInThisWeek(recipe, recipe.isInThisWeek)
+    }
+
     private func markAsCooked(scrollProxy: ScrollViewProxy) {
         // Scroll to top
         withAnimation(.easeInOut(duration: 0.4)) {

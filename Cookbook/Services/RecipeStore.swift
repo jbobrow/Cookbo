@@ -11,6 +11,8 @@ class RecipeStore: ObservableObject {
     @Published var shouldShowNewRecipe: Bool = false
     @Published var shouldShowURLImport: Bool = false
     @Published var pendingImportURL: String?
+    /// The week-closing Friday the This Week plan was last reviewed for.
+    @Published var weekPlanLastHandled: Date?
 
     private let fileManager = FileManager.default
     private let userDefaults = UserDefaults.standard
@@ -57,6 +59,10 @@ class RecipeStore: ObservableObject {
         currentCookbookURL?.appendingPathComponent("categories.json")
     }
 
+    private var weekPlanURL: URL? {
+        currentCookbookURL?.appendingPathComponent("weekplan.json")
+    }
+
     private var cookbookMetadataURL: URL? {
         currentCookbookURL?.appendingPathComponent("cookbook.json")
     }
@@ -78,6 +84,7 @@ class RecipeStore: ObservableObject {
         setupiCloudDirectory()
         loadCookbook()
         loadCategories()
+        loadWeekPlan()
         loadRecipes()
 
         // Watch for iCloud changes (only if using iCloud)
@@ -106,6 +113,7 @@ class RecipeStore: ObservableObject {
         setupiCloudDirectory()
         loadCookbook()
         loadCategories()
+        loadWeekPlan()
         loadRecipes()
     }
 
@@ -134,6 +142,7 @@ class RecipeStore: ObservableObject {
         DispatchQueue.main.async {
             self.loadCookbook()
             self.loadCategories()
+            self.loadWeekPlan()
             self.loadRecipes()
         }
     }
@@ -253,6 +262,7 @@ class RecipeStore: ObservableObject {
 
         // Reload data for new cookbook
         loadCategories()
+        loadWeekPlan()
         loadRecipes()
     }
 
@@ -263,6 +273,7 @@ class RecipeStore: ObservableObject {
         // Reload all data for the new cookbook
         loadCookbook()
         loadCategories()
+        loadWeekPlan()
         loadRecipes()
     }
 
@@ -586,6 +597,87 @@ class RecipeStore: ObservableObject {
         var updatedRecipe = recipe
         updatedRecipe.datesCooked.append(Date())
         saveRecipe(updatedRecipe)
+    }
+
+    // MARK: - Collections
+
+    /// The recipe to offer in the "Just viewed" row.
+    var lastViewedRecipe: Recipe? {
+        recipes
+            .filter { $0.dateLastViewed != nil }
+            .max { ($0.dateLastViewed ?? .distantPast) < ($1.dateLastViewed ?? .distantPast) }
+    }
+
+    func recipes(in collection: RecipeCollection) -> [Recipe] {
+        RecipeCollectionRules.apply(collection, to: recipes)
+    }
+
+    /// Records that a recipe was opened. Reads the stored copy rather than
+    /// trusting the caller's, so a stale view doesn't overwrite newer edits.
+    func markViewed(_ recipe: Recipe) {
+        guard var current = recipes.first(where: { $0.id == recipe.id }) else { return }
+        current.dateLastViewed = Date()
+        saveRecipe(current)
+    }
+
+    // MARK: - This Week Plan
+
+    func setInThisWeek(_ recipe: Recipe, _ isInPlan: Bool) {
+        guard var current = recipes.first(where: { $0.id == recipe.id }) else { return }
+        guard current.isInThisWeek != isInPlan else { return }
+        current.isInThisWeek = isInPlan
+        saveRecipe(current)
+    }
+
+    /// Empties the plan and marks this week reviewed.
+    func clearThisWeek() {
+        for recipe in recipes where recipe.isInThisWeek {
+            var updated = recipe
+            updated.isInThisWeek = false
+            saveRecipe(updated)
+        }
+        markWeekPlanReviewed()
+    }
+
+    /// Keeps the plan as-is and marks this week reviewed, so the prompt comes
+    /// back at the close of next week.
+    func rollOverThisWeek() {
+        markWeekPlanReviewed()
+    }
+
+    var isWeekPlanReviewDue: Bool {
+        guard recipes.contains(where: { $0.isInThisWeek }) else { return false }
+        return WeekPlan.isReviewDue(lastHandled: weekPlanLastHandled)
+    }
+
+    private func markWeekPlanReviewed() {
+        weekPlanLastHandled = WeekPlan.weekClose(onOrBefore: Date())
+        saveWeekPlan()
+    }
+
+    private func loadWeekPlan() {
+        guard let url = weekPlanURL, fileManager.fileExists(atPath: url.path) else {
+            weekPlanLastHandled = nil
+            return
+        }
+
+        guard let data = try? Data(contentsOf: url) else { return }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let state = try? decoder.decode(WeekPlanState.self, from: data) else { return }
+
+        DispatchQueue.main.async {
+            self.weekPlanLastHandled = state.lastHandled
+        }
+    }
+
+    private func saveWeekPlan() {
+        guard let url = weekPlanURL else { return }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(WeekPlanState(lastHandled: weekPlanLastHandled)) else { return }
+        try? data.write(to: url, options: .atomic)
     }
 
     // MARK: - Sample Recipe

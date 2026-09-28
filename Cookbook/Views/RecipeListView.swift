@@ -15,8 +15,15 @@ struct RecipeListView: View {
     @State private var showingDeleteConfirmation = false
     @State private var isSearching = false
     @State private var showingWelcome = false
+    @State private var selectedCollection: RecipeCollection = .all
+    @State private var showingWeekReview = false
     @AppStorage("recipeViewMode") private var viewMode: RecipeViewMode = .grid
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
+    /// Persisted across launches; the animated source of truth is
+    /// `collapsedCategoryIDs` below, because @AppStorage writes land outside
+    /// the withAnimation transaction and the rows would jump.
+    @AppStorage("collapsedCategoryIDs") private var collapsedCategoryIDsRaw = ""
+    @State private var collapsedCategoryIDs: Set<String> = []
     #if os(macOS)
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
     #endif
@@ -32,18 +39,117 @@ struct RecipeListView: View {
         #endif
     }
 
+    /// Recipes in the selected collection, before the search field is applied.
+    var collectionRecipes: [Recipe] {
+        store.recipes(in: selectedCollection)
+    }
+
     var filteredRecipes: [Recipe] {
         if searchText.isEmpty {
-            return store.recipes
+            return collectionRecipes
         }
-        return store.recipes.filter { recipe in
+        return collectionRecipes.filter { recipe in
             recipe.title.localizedCaseInsensitiveContains(searchText) ||
             recipe.allIngredients.contains { $0.text.localizedCaseInsensitiveContains(searchText) }
         }
     }
 
+    /// Category grouping only applies to the All view; the smart collections
+    /// and a single category are already one flat, sorted list.
+    private var isGrouped: Bool {
+        selectedCollection == .all
+    }
+
+    // MARK: - Collections
+
+    /// Chips to offer: All, then whichever smart collections have something in
+    /// them (a chip that filters to nothing is a dead end), then the categories.
+    private var availableCollections: [RecipeCollection] {
+        var collections: [RecipeCollection] = [.all]
+        collections += RecipeCollection.smartCollections.filter { !store.recipes(in: $0).isEmpty }
+        collections += store.categories.map { RecipeCollection.category($0.id) }
+        return collections
+    }
+
+    private func title(for collection: RecipeCollection) -> String {
+        if let fixed = collection.fixedTitle { return fixed }
+        if case .category(let id) = collection {
+            return store.categories.first(where: { $0.id == id })?.name ?? "Category"
+        }
+        return ""
+    }
+
+    private var collectionBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(availableCollections) { collection in
+                    CollectionChip(
+                        title: title(for: collection),
+                        icon: collection.icon,
+                        tint: chipTint(for: collection),
+                        isSelected: selectedCollection == collection
+                    ) {
+                        selectedCollection = collection
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private func chipTint(for collection: RecipeCollection) -> Color {
+        if case .category(let id) = collection,
+           let category = store.categories.first(where: { $0.id == id }) {
+            return category.color
+        }
+        return .accentColor
+    }
+
+    // MARK: - Just Viewed
+
+    @ViewBuilder
+    private var justViewedRow: some View {
+        if let recipe = store.lastViewedRecipe {
+            NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
+                JustViewedRow(recipe: recipe)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+        }
+    }
+
+    // MARK: - Category Collapsing
+
+    private func isCollapsed(_ category: Category?) -> Bool {
+        collapsedCategoryIDs.contains(key(for: category))
+    }
+
+    private func loadCollapsedCategories() {
+        collapsedCategoryIDs = Set(collapsedCategoryIDsRaw.split(separator: ",").map(String.init))
+    }
+
+    private func toggleCollapsed(_ category: Category?) {
+        let id = key(for: category)
+
+        withAnimation(.easeInOut(duration: 0.28)) {
+            if collapsedCategoryIDs.contains(id) {
+                collapsedCategoryIDs.remove(id)
+            } else {
+                collapsedCategoryIDs.insert(id)
+            }
+        }
+
+        collapsedCategoryIDsRaw = collapsedCategoryIDs.sorted().joined(separator: ",")
+    }
+
+    private func key(for category: Category?) -> String {
+        category?.id.uuidString ?? "uncategorized"
+    }
+
     var groupedRecipes: [(category: Category?, recipes: [Recipe])] {
-        if store.categories.isEmpty {
+        if !isGrouped || store.categories.isEmpty {
             return [(nil, filteredRecipes)]
         }
 
@@ -73,11 +179,13 @@ struct RecipeListView: View {
         List {
             ForEach(Array(groupedRecipes.enumerated()), id: \.offset) { groupIndex, group in
                 Section {
-                    ForEach(group.recipes) { recipe in
+                    ForEach(isCollapsed(group.category) && isGrouped ? [] : group.recipes) { recipe in
                         NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
                             RecipeRowView(recipe: recipe, showCategory: false)
                         }
                         .swipeActions(edge: .leading) {
+                            // First action is also the full-swipe default
+                            thisWeekButton(for: recipe)
                             Button(action: { shareRecipe(recipe) }) {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
@@ -86,6 +194,7 @@ struct RecipeListView: View {
                         .contextMenu {
                             categoryMenuItems(for: recipe)
                             Divider()
+                            thisWeekButton(for: recipe)
                             Button(action: { shareRecipe(recipe) }) {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
@@ -95,19 +204,14 @@ struct RecipeListView: View {
                         deleteRecipesInSection(at: offsets, in: groupIndex)
                     }
                 } header: {
-                    if let category = group.category {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(category.color)
-                                .frame(width: 12, height: 12)
-                            Text(category.name)
-                                .font(.headline)
-                                .foregroundColor(.primary)
+                    if isGrouped, group.category != nil || !store.categories.isEmpty {
+                        CategorySectionHeader(
+                            category: group.category,
+                            count: group.recipes.count,
+                            isCollapsed: isCollapsed(group.category)
+                        ) {
+                            toggleCollapsed(group.category)
                         }
-                    } else if !store.categories.isEmpty {
-                        Text("Uncategorized")
-                            .font(.headline)
-                            .foregroundColor(.primary)
                     }
                 }
             }
@@ -120,14 +224,16 @@ struct RecipeListView: View {
                 ForEach(Array(groupedRecipes.enumerated()), id: \.offset) { groupIndex, group in
                     Section {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 200, maximum: 250), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
-                            ForEach(group.recipes) { recipe in
+                            ForEach(isCollapsed(group.category) && isGrouped ? [] : group.recipes) { recipe in
                                 NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
                                     RecipeCardView(recipe: recipe, showCategory: false)
                                 }
                                 .buttonStyle(.plain)
+                                .transition(.opacity.combined(with: .scale(scale: 0.95)))
                                 .contextMenu {
                                     categoryMenuItems(for: recipe)
                                     Divider()
+                                    thisWeekButton(for: recipe)
                                     Button(action: { shareRecipe(recipe) }) {
                                         Label("Share", systemImage: "square.and.arrow.up")
                                     }
@@ -144,25 +250,18 @@ struct RecipeListView: View {
                         }
                         .padding(.horizontal, 20)
                     } header: {
-                        if let category = group.category {
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(category.color)
-                                    .frame(width: 12, height: 12)
-                                Text(category.name)
-                                    .font(.headline)
+                        if isGrouped, group.category != nil || !store.categories.isEmpty {
+                            CategorySectionHeader(
+                                category: group.category,
+                                count: group.recipes.count,
+                                isCollapsed: isCollapsed(group.category)
+                            ) {
+                                toggleCollapsed(group.category)
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 8)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(.background)
-                        } else if !store.categories.isEmpty {
-                            Text("Uncategorized")
-                                .font(.headline)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(.background)
                         }
                     }
                 }
@@ -175,11 +274,52 @@ struct RecipeListView: View {
         Group {
             if store.recipes.isEmpty {
                 emptyState
-            } else if isGridCapable && viewMode == .grid {
-                recipeGrid
             } else {
-                recipeList
+                VStack(spacing: 0) {
+                    justViewedRow
+                    collectionBar
+                    if filteredRecipes.isEmpty {
+                        emptyCollectionState
+                    } else if isGridCapable && viewMode == .grid {
+                        recipeGrid
+                    } else {
+                        recipeList
+                    }
+                }
             }
+        }
+    }
+
+    /// Shown when the cookbook has recipes but this collection or search has none.
+    private var emptyCollectionState: some View {
+        VStack {
+            Spacer(minLength: 40)
+            ContentUnavailableView {
+                Label(emptyCollectionTitle, systemImage: selectedCollection.icon)
+            } description: {
+                Text(emptyCollectionMessage)
+            }
+            Spacer()
+        }
+    }
+
+    private var emptyCollectionTitle: String {
+        searchText.isEmpty ? "Nothing Here Yet" : "No Matches"
+    }
+
+    private var emptyCollectionMessage: String {
+        if !searchText.isEmpty {
+            return "No recipes in \(title(for: selectedCollection)) match '\(searchText)'."
+        }
+        switch selectedCollection {
+        case .thisWeek:
+            return "Add recipes to this week's plan from a recipe's menu."
+        case .favorites:
+            return "Recipes you rate \(RecipeCollectionRules.favoriteRating) stars or cook \(RecipeCollectionRules.favoriteCookCount) times show up here."
+        case .recentlyAdded:
+            return "Recipes you add or import will show up here."
+        default:
+            return "This category doesn't have any recipes yet."
         }
     }
 
@@ -274,7 +414,24 @@ struct RecipeListView: View {
         .sheet(isPresented: $showingWelcome) {
             WelcomeView(onFinish: { hasSeenWelcome = true })
         }
-        .onAppear(perform: showWelcomeIfNeeded)
+        .onAppear {
+            loadCollapsedCategories()
+            showWelcomeIfNeeded()
+            showWeekReviewIfDue()
+        }
+        .onChange(of: store.recipes.count) { _, _ in
+            showWeekReviewIfDue()
+            resetCollectionIfUnavailable()
+        }
+        .onChange(of: store.categories) { _, _ in resetCollectionIfUnavailable() }
+        .alert("Plan for Next Week?", isPresented: $showingWeekReview) {
+            Button("Keep for Next Week") { store.rollOverThisWeek() }
+            Button("Clear It", role: .destructive) { store.clearThisWeek() }
+            // Leaves the plan untouched, so the prompt returns on the next launch
+            Button("Not Now", role: .cancel) { }
+        } message: {
+            Text("This week's plan has \(store.recipes(in: .thisWeek).count) recipe\(store.recipes(in: .thisWeek).count == 1 ? "" : "s"). Clear it out, or keep it going for next week?")
+        }
         .onChange(of: store.isICloudAvailable) { _, _ in showWelcomeIfNeeded() }
         .onChange(of: store.useLocalStorage) { _, _ in showWelcomeIfNeeded() }
         .onChange(of: store.shouldShowNewRecipe) { oldValue, newValue in
@@ -448,6 +605,20 @@ struct RecipeListView: View {
         }
     }
 
+    private func showWeekReviewIfDue() {
+        guard store.isWeekPlanReviewDue else { return }
+        showingWeekReview = true
+    }
+
+    /// Falls back to All if the selected chip disappears — its category was
+    /// deleted, or its smart collection emptied out.
+    private func resetCollectionIfUnavailable() {
+        guard selectedCollection != .all else { return }
+        if !availableCollections.contains(selectedCollection) {
+            selectedCollection = .all
+        }
+    }
+
     private var deleteCount: Int {
         recipesToDelete?.count ?? 0
     }
@@ -465,6 +636,22 @@ struct RecipeListView: View {
         }
     }
     
+    /// Toggles a recipe in and out of the This Week plan. Used by both the
+    /// leading swipe and the context menus.
+    @ViewBuilder
+    private func thisWeekButton(for recipe: Recipe) -> some View {
+        Button {
+            store.setInThisWeek(recipe, !recipe.isInThisWeek)
+        } label: {
+            if recipe.isInThisWeek {
+                Label("Remove from Week", systemImage: "calendar.badge.minus")
+            } else {
+                Label("This Week", systemImage: "calendar.badge.plus")
+            }
+        }
+        .tint(recipe.isInThisWeek ? .orange : .green)
+    }
+
     @ViewBuilder
     private func categoryMenuItems(for recipe: Recipe) -> some View {
         if !store.categories.isEmpty {
@@ -883,6 +1070,135 @@ struct RecipeCardView: View {
             let minutes = total % 60
             return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h"
         }
+    }
+}
+
+/// A single filter chip in the collection bar.
+struct CollectionChip: View {
+    let title: String
+    let icon: String
+    let tint: Color
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.caption)
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(isSelected ? .semibold : .regular)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(isSelected ? tint : Color.gray.opacity(0.15))
+            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+/// A category section header that folds its recipes away.
+struct CategorySectionHeader: View {
+    let category: Category?
+    let count: Int
+    let isCollapsed: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+
+                if let category = category {
+                    Circle()
+                        .fill(category.color)
+                        .frame(width: 12, height: 12)
+                    Text(category.name)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                } else {
+                    Text("Uncategorized")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                }
+
+                Spacer()
+
+                Text("\(count)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(category?.name ?? "Uncategorized")
+        .accessibilityHint(isCollapsed ? "Expand section" : "Collapse section")
+    }
+}
+
+/// The slim "pick up where you left off" row above the list.
+struct JustViewedRow: View {
+    let recipe: Recipe
+
+    var body: some View {
+        HStack(spacing: 12) {
+            thumbnail
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Just Viewed")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(recipe.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            // Matches the disclosure chevron the list rows get from NavigationLink
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(10)
+        .background(Color.gray.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let imageData = recipe.imageData, let image = platformImage(from: imageData) {
+            image
+                .resizable()
+                .scaledToFill()
+                .frame(width: 38, height: 38)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        } else {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.gray.opacity(0.25))
+                .frame(width: 38, height: 38)
+                .overlay(Image(systemName: "photo").font(.caption).foregroundStyle(.secondary))
+        }
+    }
+
+    private func platformImage(from data: Data) -> Image? {
+        #if os(iOS)
+        guard let uiImage = UIImage(data: data) else { return nil }
+        return Image(uiImage: uiImage)
+        #elseif os(macOS)
+        guard let nsImage = NSImage(data: data) else { return nil }
+        return Image(nsImage: nsImage)
+        #endif
     }
 }
 

@@ -30,6 +30,12 @@ struct RecipeMarkdownSerializer {
         if let categoryID = recipe.categoryID {
             lines.append("categoryID: \(categoryID.uuidString)")
         }
+        if let lastViewed = recipe.dateLastViewed {
+            lines.append("lastViewed: \(formatTimestamp(lastViewed))")
+        }
+        if recipe.isInThisWeek {
+            lines.append("thisWeek: true")
+        }
         lines.append("---")
         lines.append("")
 
@@ -104,6 +110,8 @@ struct RecipeMarkdownSerializer {
         let cookDuration = parseDuration(yaml["cookDuration"] ?? "0")
         let sourceURL = yaml["sourceURL"] ?? ""
         let categoryID: UUID? = yaml["categoryID"].flatMap { UUID(uuidString: $0) }
+        let dateLastViewed = yaml["lastViewed"].flatMap { parseTimestamp($0) }
+        let isInThisWeek = (yaml["thisWeek"] ?? "") == "true"
 
         // Parse body sections
         let sections = parseSections(body)
@@ -124,7 +132,9 @@ struct RecipeMarkdownSerializer {
             prepDuration: prepDuration,
             cookDuration: cookDuration,
             notes: notes,
-            categoryID: categoryID
+            categoryID: categoryID,
+            dateLastViewed: dateLastViewed,
+            isInThisWeek: isInThisWeek
         )
     }
 
@@ -215,8 +225,26 @@ struct RecipeMarkdownSerializer {
         return f
     }()
 
+    /// Timestamps need the time of day, which the date-only format above drops.
+    private static let timestampFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     private static func formatDate(_ date: Date) -> String {
         dateFormatter.string(from: date)
+    }
+
+    private static func formatTimestamp(_ date: Date) -> String {
+        timestampFormatter.string(from: date)
+    }
+
+    /// Reads a full timestamp, falling back to a plain `yyyy-MM-dd` so a
+    /// hand-edited file still parses.
+    private static func parseTimestamp(_ string: String) -> Date? {
+        let trimmed = string.trimmingCharacters(in: .whitespaces)
+        return timestampFormatter.date(from: trimmed) ?? parseDate(trimmed)
     }
 
     private static func parseDate(_ string: String) -> Date? {

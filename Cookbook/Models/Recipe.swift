@@ -24,6 +24,8 @@ struct Recipe: Identifiable, Codable {
     var cookDuration: TimeInterval // in seconds
     var notes: String
     var categoryID: UUID?
+    var dateLastViewed: Date?   // Drives the "Just viewed" row
+    var isInThisWeek: Bool      // Membership in the This Week plan
 
     var allIngredients: [Ingredient] {
         ingredientSections.flatMap { $0.ingredients }
@@ -33,6 +35,7 @@ struct Recipe: Identifiable, Codable {
         case id, title, imageData, imageName, ingredients, ingredientSections, directions
         case dateCreated, datesCooked, sourceURL, rating
         case prepDuration, cookDuration, notes, categoryID
+        case dateLastViewed, isInThisWeek
     }
 
     init(
@@ -50,7 +53,9 @@ struct Recipe: Identifiable, Codable {
         prepDuration: TimeInterval = 0,
         cookDuration: TimeInterval = 0,
         notes: String = "",
-        categoryID: UUID? = nil
+        categoryID: UUID? = nil,
+        dateLastViewed: Date? = nil,
+        isInThisWeek: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -70,6 +75,8 @@ struct Recipe: Identifiable, Codable {
         self.cookDuration = cookDuration
         self.notes = notes
         self.categoryID = categoryID
+        self.dateLastViewed = dateLastViewed
+        self.isInThisWeek = isInThisWeek
     }
 
     init(from decoder: Decoder) throws {
@@ -95,6 +102,8 @@ struct Recipe: Identifiable, Codable {
         cookDuration = try container.decode(TimeInterval.self, forKey: .cookDuration)
         notes = try container.decode(String.self, forKey: .notes)
         categoryID = try container.decodeIfPresent(UUID.self, forKey: .categoryID)
+        dateLastViewed = try container.decodeIfPresent(Date.self, forKey: .dateLastViewed)
+        isInThisWeek = try container.decodeIfPresent(Bool.self, forKey: .isInThisWeek) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -115,6 +124,10 @@ struct Recipe: Identifiable, Codable {
         try container.encode(cookDuration, forKey: .cookDuration)
         try container.encode(notes, forKey: .notes)
         try container.encodeIfPresent(categoryID, forKey: .categoryID)
+        try container.encodeIfPresent(dateLastViewed, forKey: .dateLastViewed)
+        if isInThisWeek {
+            try container.encode(isInThisWeek, forKey: .isInThisWeek)
+        }
     }
 
     var image: Image? {

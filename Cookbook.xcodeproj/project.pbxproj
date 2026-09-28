@@ -12,6 +12,11 @@
 		7B2B729AD4980D364B7C0C6E /* InstagramParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC14C824BE658B885EC73CA4 /* InstagramParserTests.swift */; };
 		A1F1E4C2D3B5A6978C0D1E2F /* RecipeFileNamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F1E4C2D3B5A6978C0D1E30 /* RecipeFileNamingTests.swift */; };
 		A1F1E4C2D3B5A6978C0D1E31 /* RecipeFileNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F1E4C2D3B5A6978C0D1E32 /* RecipeFileNaming.swift */; };
+		C0FFEEB100000000000000 /* RecipeCollectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB111111111110000 /* RecipeCollectionTests.swift */; };
+		C0FFEEB200000000000001 /* WeekPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB211111111110001 /* WeekPlanTests.swift */; };
+		C0FFEEB300000000000002 /* RecipeCollection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB311111111110002 /* RecipeCollection.swift */; };
+		C0FFEEB400000000000003 /* WeekPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB411111111110003 /* WeekPlan.swift */; };
+		C0FFEEB500000000000004 /* Recipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB511111111110004 /* Recipe.swift */; };
 		CC000000000000000000000E /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000001 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F0B8B881D22C2B413372F937 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 543D3101572A923451D77D4D /* Foundation.framework */; };
 		F8F63616CBF0C40478ED1536 /* RecipeParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */; };
@@ -56,6 +61,11 @@
 		BC14C824BE658B885EC73CA4 /* InstagramParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InstagramParserTests.swift; sourceTree = "<group>"; };
 		A1F1E4C2D3B5A6978C0D1E30 /* RecipeFileNamingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipeFileNamingTests.swift; sourceTree = "<group>"; };
 		A1F1E4C2D3B5A6978C0D1E32 /* RecipeFileNaming.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecipeFileNaming.swift; path = Cookbook/Services/RecipeFileNaming.swift; sourceTree = SOURCE_ROOT; };
+		C0FFEEB111111111110000 /* RecipeCollectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipeCollectionTests.swift; sourceTree = "<group>"; };
+		C0FFEEB211111111110001 /* WeekPlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WeekPlanTests.swift; sourceTree = "<group>"; };
+		C0FFEEB311111111110002 /* RecipeCollection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecipeCollection.swift; path = Cookbook/Models/RecipeCollection.swift; sourceTree = SOURCE_ROOT; };
+		C0FFEEB411111111110003 /* WeekPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeekPlan.swift; path = Cookbook/Services/WeekPlan.swift; sourceTree = SOURCE_ROOT; };
+		C0FFEEB511111111110004 /* Recipe.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Recipe.swift; path = Cookbook/Models/Recipe.swift; sourceTree = SOURCE_ROOT; };
 		CC0000000000000000000001 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -126,6 +136,8 @@
 			children = (
 				BC14C824BE658B885EC73CA4 /* InstagramParserTests.swift */,
 				A1F1E4C2D3B5A6978C0D1E30 /* RecipeFileNamingTests.swift */,
+				C0FFEEB111111111110000 /* RecipeCollectionTests.swift */,
+				C0FFEEB211111111110001 /* WeekPlanTests.swift */,
 			);
 			path = CookbookTests;
 			sourceTree = "<group>";
@@ -326,6 +338,11 @@
 				7B2B729AD4980D364B7C0C6E /* InstagramParserTests.swift in Sources */,
 				A1F1E4C2D3B5A6978C0D1E2F /* RecipeFileNamingTests.swift in Sources */,
 				A1F1E4C2D3B5A6978C0D1E31 /* RecipeFileNaming.swift in Sources */,
+				C0FFEEB100000000000000 /* RecipeCollectionTests.swift in Sources */,
+				C0FFEEB200000000000001 /* WeekPlanTests.swift in Sources */,
+				C0FFEEB300000000000002 /* RecipeCollection.swift in Sources */,
+				C0FFEEB400000000000003 /* WeekPlan.swift in Sources */,
+				C0FFEEB500000000000004 /* Recipe.swift in Sources */,
 				F8F63616CBF0C40478ED1536 /* RecipeParserCore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
