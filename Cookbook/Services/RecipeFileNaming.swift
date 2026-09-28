@@ -56,6 +56,12 @@ struct RecipeFileNaming {
         return result.isEmpty ? fallbackSlug : result
     }
 
+    /// Folder name for a cookbook, following the same pattern without an extension:
+    /// `<kebab-case-name>-<hash>`, e.g. `family-recipes-5a391c`.
+    static func cookbookFolderName(name: String, id: UUID) -> String {
+        "\(slug(for: name))-\(shortHash(for: id))"
+    }
+
     // MARK: - Reading names
 
     /// Extracts the short hash from an existing recipe filename.

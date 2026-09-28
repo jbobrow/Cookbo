@@ -62,7 +62,7 @@ The Cookbook app follows a clean MVVM (Model-View-ViewModel) architecture using 
 │                    Storage & Sharing                        │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  iCloud Drive / Documents / Recipes /                       │
+│  iCloud Drive / Cookbooks / family-recipes-5a391c / Recipes │
 │         ├── banana-bread-3f2504.md                          │
 │         ├── chicken-tikka-masala-a81b2c.md                  │
 │         └── weeknight-pasta-0c9e77.md                       │
@@ -324,6 +324,9 @@ UI updates automatically
 - The 6-character hash is the start of the recipe's UUID, so two recipes with the same title never collide and the name is stable across devices
 - The recipe's identity is the `id` in the file's front matter, not the filename; renaming the title just renames the file
 - Legacy `[UUID].json` and `[UUID].md` files are migrated to the new name on load (see `RecipeFileNaming`)
+- If a recipe ends up in more than one file (e.g. an older app version on another device saved it under its old name), the most recently modified copy wins
+- Cookbook folders follow the same pattern without an extension: `Cookbooks/<kebab-case-name>-<hash>/`, e.g. `family-recipes-5a391c`. Identity is the `id` in `cookbook.json`, so folders are found by reading it, and renaming a cookbook renames its folder (after the name stops changing for 1.5s)
+- Versions before 1.4 open a cookbook at `Cookbooks/[UUID]/`, so one running on another device recreates that folder, empty. `CookbookFolders.consolidate()` merges any such duplicate into the real folder on load, keeping the newer file on conflicts, and only deletes it once empty so undownloaded iCloud files are never lost
 
 **Sharing (Export):**
 - Files named with recipe title: `Recipe_Title.cookbook.json`

@@ -42,9 +42,32 @@ class RecipeStore: ObservableObject {
         }
     }
 
+    /// Where each cookbook's folder was last found. A folder is named after its cookbook
+    /// (see `CookbookFolders`), so the id is the only stable way to find it.
+    private var cookbookDirectories: [UUID: URL] = [:]
+    private var pendingFolderRename: DispatchWorkItem?
+
+    private var cookbookFolders: CookbookFolders? {
+        baseURL.map { CookbookFolders(baseURL: $0, fileManager: fileManager) }
+    }
+
     private var currentCookbookURL: URL? {
-        guard let baseURL = baseURL else { return nil }
-        return baseURL.appendingPathComponent(cookbook.id.uuidString)
+        directory(for: cookbook)
+    }
+
+    /// A cookbook's folder: where it was last seen, found again by id if it has moved since
+    /// (renamed on another device), or where it should go if it hasn't been created yet.
+    private func directory(for cookbook: Cookbook) -> URL? {
+        guard let folders = cookbookFolders else { return nil }
+
+        if let known = cookbookDirectories[cookbook.id], fileManager.fileExists(atPath: known.path) {
+            return known
+        }
+        if let found = folders.find(cookbook.id) {
+            cookbookDirectories[cookbook.id] = found
+            return found
+        }
+        return folders.expectedURL(for: cookbook)
     }
 
     private var iCloudURL: URL? {
@@ -150,33 +173,15 @@ class RecipeStore: ObservableObject {
     // MARK: - Cookbook Management
 
     func loadAllCookbooks() {
-        guard let baseURL = baseURL else { return }
+        guard let folders = cookbookFolders else { return }
 
-        do {
-            let cookbookDirs = try fileManager.contentsOfDirectory(
-                at: baseURL,
-                includingPropertiesForKeys: nil,
-                options: .skipsHiddenFiles
-            )
+        // Migration: renames legacy `<UUID>` folders to `<name>-<hash>`, and folds in any
+        // duplicate folder an older app version created (see CookbookFolders)
+        let entries = folders.consolidate()
+        cookbookDirectories = Dictionary(uniqueKeysWithValues: entries.map { ($0.cookbook.id, $0.url) })
 
-            var cookbooks: [Cookbook] = []
-            for dir in cookbookDirs {
-                let metadataURL = dir.appendingPathComponent("cookbook.json")
-                if fileManager.fileExists(atPath: metadataURL.path),
-                   let data = try? Data(contentsOf: metadataURL),
-                   let cookbook = try? JSONDecoder().decode(Cookbook.self, from: data) {
-                    cookbooks.append(cookbook)
-                }
-            }
-
-            // Sort and assign synchronously - don't dispatch to main queue yet
-            availableCookbooks = cookbooks.sorted { $0.name < $1.name }
-        } catch {
-            #if DEBUG
-            print("Error loading cookbooks: \(error)")
-            #endif
-            availableCookbooks = []
-        }
+        // Sort and assign synchronously - don't dispatch to main queue yet
+        availableCookbooks = entries.map(\.cookbook).sorted { $0.name < $1.name }
     }
 
     func loadCurrentCookbook() {
@@ -219,12 +224,13 @@ class RecipeStore: ObservableObject {
     }
 
     func saveCookbook() {
-        guard let url = cookbookMetadataURL else { return }
+        guard let cookbookDir = currentCookbookURL else { return }
+        let url = cookbookDir.appendingPathComponent("cookbook.json")
 
         // Ensure directory exists
-        if let cookbookDir = currentCookbookURL {
-            try? fileManager.createDirectory(at: cookbookDir, withIntermediateDirectories: true)
-        }
+        try? fileManager.createDirectory(at: cookbookDir, withIntermediateDirectories: true)
+        cookbookDirectories[cookbook.id] = cookbookDir
+        scheduleFolderRename(for: cookbook.id)
 
         var updatedCookbook = cookbook
         updatedCookbook.dateModified = Date()
@@ -244,6 +250,23 @@ class RecipeStore: ObservableObject {
             print("Error saving cookbook: \(error)")
             #endif
         }
+    }
+
+    /// Renames a cookbook's folder to match its name once the name stops changing.
+    /// Settings saves on every keystroke, and renaming a folder full of synced files
+    /// that often would churn iCloud for nothing.
+    private func scheduleFolderRename(for id: UUID) {
+        pendingFolderRename?.cancel()
+        let rename = DispatchWorkItem { [weak self] in
+            guard let self,
+                  let folders = self.cookbookFolders,
+                  let target = self.cookbook.id == id ? self.cookbook : self.availableCookbooks.first(where: { $0.id == id }),
+                  let current = self.directory(for: target),
+                  self.fileManager.fileExists(atPath: current.path) else { return }
+            self.cookbookDirectories[id] = folders.rename(current, toMatch: target)
+        }
+        pendingFolderRename = rename
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: rename)
     }
 
     func createCookbook(_ newCookbook: Cookbook) {
@@ -278,11 +301,11 @@ class RecipeStore: ObservableObject {
     }
 
     func deleteCookbook(_ cookbookToDelete: Cookbook) {
-        guard let baseURL = baseURL else { return }
-        let cookbookDir = baseURL.appendingPathComponent(cookbookToDelete.id.uuidString)
+        guard let cookbookDir = directory(for: cookbookToDelete) else { return }
 
         do {
             try fileManager.removeItem(at: cookbookDir)
+            cookbookDirectories[cookbookToDelete.id] = nil
             availableCookbooks.removeAll { $0.id == cookbookToDelete.id }
 
             // If we deleted the current cookbook, switch to another one
@@ -454,21 +477,27 @@ class RecipeStore: ObservableObject {
                 }
             }
 
-            // If a recipe exists under both its current name and a stale one, prefer the current one
+            // A recipe can end up in more than one file: a legacy `<UUID>.md` next to its
+            // renamed copy, a stale-title copy, or one an older app version on another
+            // device saved under the old name. Keep whichever was saved most recently, so
+            // an edit made elsewhere isn't thrown away; on a tie, keep the correctly named one.
             parsedMarkdown.sort { lhs, rhs in
                 let lhsMatches = lhs.fileURL.lastPathComponent == recipeFileName(for: lhs.recipe)
                 let rhsMatches = rhs.fileURL.lastPathComponent == recipeFileName(for: rhs.recipe)
                 return lhsMatches && !rhsMatches
             }
-
-            for (fileURL, parsedRecipe) in parsedMarkdown {
-                var recipe = parsedRecipe
-
-                // Remove duplicates (a stale-title or legacy-named copy of an already-loaded recipe)
-                guard !loadedIDs.contains(recipe.id) else {
-                    try? fileManager.removeItem(at: fileURL)
-                    continue
+            var newestCopies: [(fileURL: URL, recipe: Recipe)] = []
+            for copies in Dictionary(grouping: parsedMarkdown, by: { $0.recipe.id }).values {
+                // max(by:) keeps the first of equal elements, so a tie goes to the correctly named file
+                guard let newest = copies.max(by: { modificationDate(of: $0.fileURL) < modificationDate(of: $1.fileURL) }) else { continue }
+                for copy in copies where copy.fileURL != newest.fileURL {
+                    try? fileManager.removeItem(at: copy.fileURL)
                 }
+                newestCopies.append(newest)
+            }
+
+            for (fileURL, parsedRecipe) in newestCopies {
+                var recipe = parsedRecipe
 
                 // Migration: rename legacy `<UUID>.md` (or stale-title) files to `<title>-<hash>.md`
                 renameIfNeeded(fileURL, for: recipe)
@@ -716,6 +745,10 @@ class RecipeStore: ObservableObject {
         }
     }
 
+    private func modificationDate(of url: URL) -> Date {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+    }
+
     /// Renames a recipe file to match the current naming convention, if it doesn't already.
     private func renameIfNeeded(_ fileURL: URL, for recipe: Recipe) {
         let expectedName = recipeFileName(for: recipe)
@@ -840,8 +873,7 @@ class RecipeStore: ObservableObject {
     // MARK: - Cookbook Statistics
 
     func recipeCount(for cookbook: Cookbook) -> Int {
-        guard let baseURL = baseURL else { return 0 }
-        let cookbookDir = baseURL.appendingPathComponent(cookbook.id.uuidString)
+        guard let cookbookDir = directory(for: cookbook) else { return 0 }
         let recipesDir = cookbookDir.appendingPathComponent("Recipes")
 
         do {
@@ -862,8 +894,7 @@ class RecipeStore: ObservableObject {
     }
 
     func categoryCount(for cookbook: Cookbook) -> Int {
-        guard let baseURL = baseURL else { return 0 }
-        let cookbookDir = baseURL.appendingPathComponent(cookbook.id.uuidString)
+        guard let cookbookDir = directory(for: cookbook) else { return 0 }
         let categoriesFile = cookbookDir.appendingPathComponent("categories.json")
 
         guard fileManager.fileExists(atPath: categoriesFile.path),

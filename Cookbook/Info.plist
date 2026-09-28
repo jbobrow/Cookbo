@@ -2,21 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSRemindersUsageDescription</key>
-	<string>Cookbook uses Reminders to add ingredients to your Groceries list.</string>
-	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Cookbook uses Reminders to add ingredients to your Groceries list.</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>com.jonbobrow.Cookbook</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>cookbook</string>
-			</array>
-		</dict>
-	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -32,6 +17,17 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.jonbobrow.Cookbook</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cookbook</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSUbiquitousContainers</key>
 	<dict>
 		<key>iCloud.com.jonbobrow.Cookbook</key>
@@ -39,7 +35,7 @@
 			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
 			<true/>
 			<key>NSUbiquitousContainerName</key>
-			<string>Cookbook</string>
+			<string>Cookbo</string>
 			<key>NSUbiquitousContainerSupportedFolderLevels</key>
 			<string>Any</string>
 		</dict>
