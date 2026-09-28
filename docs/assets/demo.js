@@ -339,7 +339,8 @@ import { recipeFileName, recipeMarkdown } from './recipe-file.js';
   }
 
   function scrollOffsetToRecipe() {
-    const offset = webRecipe.getBoundingClientRect().top - page.getBoundingClientRect().top - 12;
+    // Layout offsets, not on-screen rects, which the browser window's tilt would skew
+    const offset = webRecipe.offsetTop - page.offsetTop - 12;
     const maxOffset = page.scrollHeight - viewport.clientHeight;
     return Math.max(0, Math.min(offset, maxOffset));
   }
@@ -374,7 +375,23 @@ import { recipeFileName, recipeMarkdown } from './recipe-file.js';
 
   const COPIED_STYLES = ['fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'fontFamily'];
 
-  function fly({ source, twin, target }, delay) {
+  /** The rotation, in degrees, an element is drawn at. */
+  function tiltOf(element) {
+    const transform = getComputedStyle(element).transform;
+    if (!transform || transform === 'none') return 0;
+    const m = new DOMMatrixReadOnly(transform);
+    return (Math.atan2(m.b, m.a) * 180) / Math.PI;
+  }
+
+  /**
+   * Flies a web piece onto its twin in the phone.
+   *
+   * The browser and phone are both tilted, so on-screen rects are the bounding
+   * boxes of rotated shapes. Their centers are still exact, so the flight goes
+   * center to center, using untransformed layout sizes, and turns from the
+   * browser's tilt to the phone's on the way.
+   */
+  function fly({ source, twin, target }, delay, tilt) {
     const origin = stage.getBoundingClientRect();
     const from = source.getBoundingClientRect();
     const to = target.getBoundingClientRect();
@@ -391,24 +408,33 @@ import { recipeFileName, recipeMarkdown } from './recipe-file.js';
       clone.style.whiteSpace = 'normal';
     }
 
-    // Text lifts off as a small card, so pad it — and account for the padding when landing
+    // Text lifts off as a small card, so it gets a little padding; scaling about the
+    // center keeps that padding even on both sides when it lands
     const pad = isImage ? 0 : 5;
+    const width = source.offsetWidth + pad * 2;
+    const height = source.offsetHeight + pad * 2;
+    const fromX = from.left + from.width / 2;
+    const fromY = from.top + from.height / 2;
+    const toX = to.left + to.width / 2;
+    const toY = to.top + to.height / 2;
+
     Object.assign(clone.style, {
-      left: `${from.left - origin.left - pad}px`,
-      top: `${from.top - origin.top - pad}px`,
-      width: `${from.width + pad * 2}px`,
-      height: `${from.height + pad * 2}px`,
+      left: `${fromX - origin.left - width / 2}px`,
+      top: `${fromY - origin.top - height / 2}px`,
+      width: `${width}px`,
+      height: `${height}px`,
       padding: `${pad}px`,
+      transformOrigin: '50% 50%',
       opacity: '0',
     });
     flyLayer.append(clone);
 
     // Images stretch to fit their frame; text scales by font size so it lands at the right size
-    const sx = isImage ? to.width / from.width : parseFloat(getComputedStyle(target).fontSize) / parseFloat(computed.fontSize);
-    const sy = isImage ? to.height / from.height : sx;
+    const sx = isImage ? target.offsetWidth / source.offsetWidth : parseFloat(getComputedStyle(target).fontSize) / parseFloat(computed.fontSize);
+    const sy = isImage ? target.offsetHeight / source.offsetHeight : sx;
 
-    const dx = to.left - from.left - pad * (sx - 1);
-    const dy = to.top - from.top - pad * (sy - 1);
+    const dx = toX - fromX;
+    const dy = toY - fromY;
 
     // Arc sideways to the direction of travel: over the top when moving right,
     // out to the side when the phone is below the browser
@@ -419,16 +445,17 @@ import { recipeFileName, recipeMarkdown } from './recipe-file.js';
 
     const duration = 820 + Math.min(length, 700) * 0.25;
 
+    const midTilt = (tilt.from + tilt.to) / 2;
     const flight = clone.animate([
-      { transform: 'translate(0, 0) scale(1)', opacity: 1 },
-      { transform: 'translate(0, -10px) scale(1.06)', opacity: 1, offset: 0.14 },
+      { transform: `translate(0, 0) rotate(${tilt.from}deg) scale(1)`, opacity: 1 },
+      { transform: `translate(0, -10px) rotate(${tilt.from}deg) scale(1.06)`, opacity: 1, offset: 0.14 },
       {
-        transform: `translate(${dx / 2 + bendX}px, ${dy / 2 + bendY}px) scale(${(1 + sx) / 2 + 0.04}, ${(1 + sy) / 2 + 0.04})`,
+        transform: `translate(${dx / 2 + bendX}px, ${dy / 2 + bendY}px) rotate(${midTilt}deg) scale(${(1 + sx) / 2 + 0.04}, ${(1 + sy) / 2 + 0.04})`,
         opacity: 1,
         offset: 0.55,
       },
-      { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, opacity: 1, offset: 0.86 },
-      { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, opacity: 0 },
+      { transform: `translate(${dx}px, ${dy}px) rotate(${tilt.to}deg) scale(${sx}, ${sy})`, opacity: 1, offset: 0.86 },
+      { transform: `translate(${dx}px, ${dy}px) rotate(${tilt.to}deg) scale(${sx}, ${sy})`, opacity: 0 },
     ], { duration, delay, easing: 'cubic-bezier(.45, 0, .2, 1)', fill: 'both' });
     animations.add(flight);
 
@@ -445,6 +472,10 @@ import { recipeFileName, recipeMarkdown } from './recipe-file.js';
         clearTimeout(land);
         animations.delete(flight);
         clone.remove();
+        // Settle the piece even if its timers didn't fire first, e.g. throttled in a
+        // background tab. (For a cancelled run these nodes are already replaced.)
+        source.classList.remove('detected');
+        twin.classList.add('landed');
       });
   }
 
@@ -491,10 +522,11 @@ import { recipeFileName, recipeMarkdown } from './recipe-file.js';
       await wait(420, id);
 
       const flights = [];
+      const tilt = { from: tiltOf($('.browser', stage)), to: tiltOf($('.phone', stage)) };
       let delay = 0;
       for (const piece of all) {
         if (isVisibleWithin(piece.source, viewport) && isVisibleWithin(piece.twin, screen)) {
-          flights.push(fly(piece, delay));
+          flights.push(fly(piece, delay, tilt));
           delay += 85;
         } else {
           // Off-screen on either side: no flight to watch, so just settle it
@@ -565,7 +597,7 @@ import { recipeFileName, recipeMarkdown } from './recipe-file.js';
   function setBusy(busy) {
     input.disabled = busy;
     tryButton.disabled = busy;
-    tryButton.textContent = busy ? 'Importing…' : 'Import';
+    tryButton.textContent = busy ? 'Importing…' : 'Try now';
   }
 
   function normalizeLink(raw) {

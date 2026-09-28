@@ -67,6 +67,62 @@
       line-height: 1.05;
     }
 
+    /* Fresh produce, drawn like the app icon, dropped beside the name on load.
+       Inline in the h1 so each piece sits exactly on the text's baseline; sized in
+       em so it scales with the title; both groups share a width so the name stays
+       centered. */
+
+    h1 { white-space: nowrap; }
+
+    .produce {
+      display: inline-block;
+      width: 3.2em;
+      letter-spacing: 0;
+    }
+
+    .produce.left { text-align: right; margin-right: .14em; }
+    .produce.right { text-align: left; margin-left: .14em; }
+
+    .produce .item {
+      display: inline-block;
+      width: auto;
+      overflow: visible;
+      transform-origin: 50% 100%;
+      transform: rotate(var(--rest));
+      animation: drop .95s var(--delay) both;
+    }
+
+    .produce .item + .item { margin-left: -.1em; }
+
+    .lemon { height: .62em; }
+    .carrot { height: .6em; }
+    .tomato { height: .84em; }
+    .garlic { height: .86em; }
+    .eggplant { height: .64em; }
+    .broccoli { height: .9em; }
+
+    @keyframes drop {
+      0% {
+        opacity: 0;
+        transform: translateY(-260px) rotate(var(--spin));
+        animation-timing-function: cubic-bezier(.5, 0, 1, .55);
+      }
+      6% { opacity: 1; }
+      52% {
+        transform: translateY(0) rotate(calc(var(--rest) * .5)) scale(1.1, .8);
+        animation-timing-function: cubic-bezier(.2, .7, .4, 1);
+      }
+      68% {
+        transform: translateY(-14%) rotate(calc(var(--rest) * 1.4)) scale(.96, 1.05);
+        animation-timing-function: cubic-bezier(.5, 0, 1, .6);
+      }
+      82% {
+        transform: translateY(0) rotate(var(--rest)) scale(1.04, .95);
+        animation-timing-function: ease-out;
+      }
+      100% { opacity: 1; transform: translateY(0) rotate(var(--rest)); }
+    }
+
     .tagline {
       margin: 10px 0 0;
       font-size: 21px;
@@ -105,10 +161,12 @@
 
     /* Browser window */
 
+    /* A slight, opposite tilt on each: friendlier than two squared-off boxes */
     .browser {
       flex: 1 1 600px;
       max-width: 620px;
       height: 440px;
+      transform: rotate(-1.5deg);
       display: flex;
       flex-direction: column;
       background: #fff;
@@ -372,6 +430,7 @@
       height: 512px;
       padding: 9px;
       perspective: 1100px;
+      transform: rotate(2deg);
       border-radius: 44px;
       background: #1C1D22;
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset, 0 18px 50px rgba(22, 23, 27, 0.22);
@@ -704,15 +763,25 @@
       .download { height: 48px; padding: 0 22px; font-size: 16px; }
     }
 
+    @media (max-width: 560px) {
+      .produce { width: 2.1em; }
+      .produce .lemon, .produce .broccoli { display: none; }
+    }
+
+    @media (max-width: 400px) {
+      h1 { font-size: 38px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .page, .app-view, .toast, .cookie { transition: none; }
+      .produce .item { animation: none; }
     }
   </style>
 </head>
 <body>
 <main>
   <img class="app-icon" src="assets/images/icon-168.png" alt="">
-  <h1>Cookbo</h1>
+  <h1><span class="produce left" aria-hidden="true"><svg class="item lemon" viewBox="0 0 64 44" style="--delay:.30s;--spin:-28deg;--rest:-7deg"><path d="M4 24c2-3 4-4 6-5 3-8 12-12 22-12s19 4 22 12c2 1 4 2 6 5-2 3-4 4-6 5-3 8-12 12-22 12S13 37 10 29c-2-1-4-2-6-5Z" fill="#FFD43B"/><path d="M17 17c4-4 10-5 15-5" fill="none" stroke="#FFF3B0" stroke-width="3.5" stroke-linecap="round"/><path d="M46 33c-4 3-9 4-14 4" fill="none" stroke="#E9B324" stroke-width="3" stroke-linecap="round"/><path d="M4 24c2-3 4-4 6-5 3-8 12-12 22-12s19 4 22 12c2 1 4 2 6 5-2 3-4 4-6 5-3 8-12 12-22 12S13 37 10 29c-2-1-4-2-6-5Z" fill="none" stroke="#2A1B24" stroke-width="4" stroke-linejoin="round"/><path d="M44 9c3-6 9-8 14-7-2 6-8 9-14 7Z" fill="#5E9E2E" stroke="#2A1B24" stroke-width="2.6" stroke-linejoin="round"/></svg><svg class="item carrot" viewBox="0 0 96 40" style="--delay:.16s;--spin:32deg;--rest:5deg"><g stroke="#2A1B24" stroke-width="3" stroke-linejoin="round"><path d="M24 17C16 9 8 4 2 5c1 7 10 11 20 15Z" fill="#6BAA35"/><path d="M23 21C13 20 6 17 2 21c5 5 13 5 21 3Z" fill="#5A9A2B"/><path d="M24 25C17 30 12 35 9 38c6 1 12-4 17-10Z" fill="#6BAA35"/></g><path d="M24 11c14-2 40 4 66 16 3 2 3 5 0 6-26 6-52 6-66 3-9-2-10-23 0-25Z" fill="#F37F1F"/><path d="M30 16c12-1 24 1 34 5" fill="none" stroke="#FFB27A" stroke-width="3" stroke-linecap="round"/><path d="M42 29l3-5M57 30l3-6M71 30l2-4M36 13l1 4" fill="none" stroke="#C85A0E" stroke-width="2.4" stroke-linecap="round"/><path d="M24 11c14-2 40 4 66 16 3 2 3 5 0 6-26 6-52 6-66 3-9-2-10-23 0-25Z" fill="none" stroke="#2A1B24" stroke-width="4" stroke-linejoin="round"/></svg><svg class="item tomato" viewBox="0 0 64 60" style="--delay:.04s;--spin:-40deg;--rest:0deg"><path d="M32 15C15 15 6 26 6 38c0 12 12 20 26 20s26-8 26-20C58 26 49 15 32 15Z" fill="#E8432D"/><path d="M50 26c6 8 5 20-6 26 7-7 9-17 6-26Z" fill="#C8321F"/><ellipse cx="19" cy="31" rx="6" ry="3.2" transform="rotate(-38 19 31)" fill="#FFB5A0"/><path d="M32 15C15 15 6 26 6 38c0 12 12 20 26 20s26-8 26-20C58 26 49 15 32 15Z" fill="none" stroke="#2A1B24" stroke-width="4"/><path d="M32 11l4 6 7-2-4 5 5 5-8-2-4 6-3-6-8 2 5-5-4-5 7 2z" fill="#5E9E2E" stroke="#2A1B24" stroke-width="2.6" stroke-linejoin="round"/><path d="M32 12c0-4 1-7 4-9" fill="none" stroke="#2A1B24" stroke-width="6" stroke-linecap="round"/><path d="M32 12c0-4 1-7 4-9" fill="none" stroke="#4E8A24" stroke-width="2.6" stroke-linecap="round"/></svg></span>Cookbo<span class="produce right" aria-hidden="true"><svg class="item garlic" viewBox="0 0 52 60" style="--delay:.10s;--spin:26deg;--rest:3deg"><path d="M26 4c2 7 5 11 11 15 10 6 13 17 8 28-3 6-10 8-19 8S10 53 7 47C2 36 5 25 15 19c6-4 9-8 11-15Z" fill="#F7EFDC"/><path d="M26 18c-6 9-7 23-3 36M26 18c6 9 7 23 3 36M16 24c-6 8-7 18-3 28M36 24c6 8 7 18 3 28" fill="none" stroke="#D8C6A6" stroke-width="2.2" stroke-linecap="round"/><path d="M11 44c4 6 13 9 20 8" fill="none" stroke="#CBB3DD" stroke-width="3" stroke-linecap="round"/><path d="M14 30c-2 5-2 10 0 14" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M26 4c2 7 5 11 11 15 10 6 13 17 8 28-3 6-10 8-19 8S10 53 7 47C2 36 5 25 15 19c6-4 9-8 11-15Z" fill="none" stroke="#2A1B24" stroke-width="4" stroke-linejoin="round"/><path d="M22 55l-1 3M26 55v3M30 55l1 3" fill="none" stroke="#2A1B24" stroke-width="2.2" stroke-linecap="round"/></svg><svg class="item eggplant" viewBox="0 0 84 44" style="--delay:.24s;--spin:-36deg;--rest:-6deg"><path d="M22 17c11-10 31-11 45-5 13 6 16 19 7 25-9 6-26 4-40-1-10-4-19-11-12-19Z" fill="#6A3E9E"/><path d="M34 14c10-4 20-4 29-1" fill="none" stroke="#9D78CF" stroke-width="3.5" stroke-linecap="round"/><path d="M22 17c11-10 31-11 45-5 13 6 16 19 7 25-9 6-26 4-40-1-10-4-19-11-12-19Z" fill="none" stroke="#2A1B24" stroke-width="4" stroke-linejoin="round"/><path d="M28 12c-6-1-11 2-13 7-5-1-9 0-12 3 4 1 8 2 11 2-1 4 0 8 3 11 1-4 3-7 6-9 3 2 7 3 10 2-2-3-3-6-3-9 2-3 1-5-2-7Z" fill="#5E9E2E" stroke="#2A1B24" stroke-width="2.6" stroke-linejoin="round"/><path d="M8 22c-2-1-4-2-6-2" fill="none" stroke="#2A1B24" stroke-width="5.5" stroke-linecap="round"/></svg><svg class="item broccoli" viewBox="0 0 56 60" style="--delay:.36s;--spin:30deg;--rest:-3deg"><path d="M22 34l-2 22c0 3 16 3 16 0l-2-22Z" fill="#A9D371" stroke="#2A1B24" stroke-width="4" stroke-linejoin="round"/><path d="M28 40v14M33 40l-1 10" fill="none" stroke="#86B84F" stroke-width="2.4" stroke-linecap="round"/><path d="M12 34C4 34 3 23 10 20 9 11 19 6 25 11c4-7 16-7 18 2 8-1 13 8 9 14 5 6-2 14-9 11-4 6-14 6-17 1-5 4-14 2-14-5Z" fill="#4E9B34"/><g fill="#3B7F26"><circle cx="17" cy="27" r="3.2"/><circle cx="30" cy="22" r="3.6"/><circle cx="41" cy="27" r="3"/><circle cx="26" cy="33" r="2.6"/></g><g fill="#7FC255"><circle cx="19" cy="17" r="2.6"/><circle cx="35" cy="13" r="2.2"/><circle cx="46" cy="21" r="1.8"/></g><path d="M12 34C4 34 3 23 10 20 9 11 19 6 25 11c4-7 16-7 18 2 8-1 13 8 9 14 5 6-2 14-9 11-4 6-14 6-17 1-5 4-14 2-14-5Z" fill="none" stroke="#2A1B24" stroke-width="4" stroke-linejoin="round"/></svg></span></h1>
   <p class="tagline">Every recipe you cook, in one place.</p>
 
   <section class="stage" id="stage" aria-labelledby="stage-label">
@@ -837,7 +906,7 @@
       <label class="sr-only" for="try-url">Recipe link</label>
       <input id="try-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"
              placeholder="Paste a link to any recipe" required>
-      <button class="pill" id="try-button" type="submit">Import</button>
+      <button class="pill" id="try-button" type="submit">Try now</button>
     </form>
     <p class="try-status" id="try-status" role="status" aria-live="polite"></p>
     <button class="replay" id="replay" type="button">
