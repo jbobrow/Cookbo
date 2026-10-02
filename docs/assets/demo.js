@@ -218,28 +218,20 @@ import { recipeFileName, recipeMarkdown } from './recipe-file.js';
     );
   }
 
-  /** The Markdown file the app would save, lightly tinted like an editor would. */
+  /** The Markdown file the app would save, minus its front matter, lightly tinted like an editor would. */
   function renderFile(recipe) {
     const name = recipeFileName(recipe.title, recipe.id);
-    const markdown = recipeMarkdown(recipe, { id: recipe.id });
+    const markdown = recipeMarkdown(recipe, { id: recipe.id }).replace(/^---\n[\s\S]*?\n---\n+/, '');
 
     $('#file-path').textContent = `iCloud Drive › ${ICLOUD_FOLDER}`;
     fileName.textContent = name;
     fileBar.textContent = name;
 
-    let inFrontMatter = false;
-    const lines = markdown.split('\n').map((line, i) => {
+    const lines = markdown.split('\n').map((line) => {
       const row = document.createDocumentFragment();
       const span = (cls, text) => row.append(el('span', { class: cls }, text));
 
-      if (line === '---') {
-        inFrontMatter = i === 0;
-        span('md-quiet', line);
-      } else if (inFrontMatter && line.includes(': ')) {
-        const at = line.indexOf(': ') + 2;
-        span('md-key', line.slice(0, at));
-        row.append(line.slice(at));
-      } else if (/^#{1,3} /.test(line)) {
+      if (/^#{1,3} /.test(line)) {
         span('md-head', line);
       } else if (line.startsWith('- [ ] ')) {
         span('md-quiet', '- [ ] ');
