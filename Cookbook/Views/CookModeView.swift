@@ -578,10 +578,8 @@ struct CookModeView: View {
     private func goBack() {
         guard stepIndex > 0 else { return }
         let previous = stepIndex - 1
+        // The step is open again, but what's been added stays checked off
         recipe.setStepCompleted(previous, false)
-        for index in plan.ingredientsFirstUsed(inStep: previous) {
-            recipe.setIngredientChecked(index, false)
-        }
         store.saveRecipe(recipe)
         movingBack = true
         withAnimation(.snappy) {
