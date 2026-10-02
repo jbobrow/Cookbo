@@ -30,6 +30,9 @@ struct CookModeView: View {
     @State private var checkedRows: Set<Int> = []
     @State private var isCooked = false
     @State private var timerToStop: CookTimer?
+    /// Which way the step text slides: in from the right going forward,
+    /// from the left going back.
+    @State private var movingBack = false
 
     init(recipe: Binding<Recipe>, accentColor: Color, enteredByRotation: Bool, startStep: Int? = nil) {
         _recipe = recipe
@@ -254,7 +257,7 @@ struct CookModeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .id(stepIndex)
         .transition(.asymmetric(
-            insertion: .move(edge: .trailing).combined(with: .opacity),
+            insertion: .move(edge: movingBack ? .leading : .trailing).combined(with: .opacity),
             removal: .opacity
         ))
         .alert("Stop this timer?", isPresented: Binding(
@@ -373,7 +376,14 @@ struct CookModeView: View {
 
     // MARK: - Ingredients
 
+    /// A new step brings a new list rather than reshaping the old rows.
     private var ingredientList: some View {
+        ingredientListContent
+            .id(stepIndex)
+            .transition(.opacity)
+    }
+
+    private var ingredientListContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("For This Step")
                 .font(.caption.weight(.bold))
@@ -400,9 +410,12 @@ struct CookModeView: View {
 
     private func ingredientRow(_ item: CookStepItem, checked: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
+            // Plain colors, and no morph between the two symbols: animating
+            // between them mid step change flashed magenta
             Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                 .font(.title3)
-                .foregroundStyle(checked ? Color.green : Color.secondary)
+                .foregroundColor(checked ? .green : .gray)
+                .contentTransition(.identity)
 
             VStack(alignment: .leading, spacing: 1) {
                 (Text(item.amount.isEmpty ? "" : item.amount + " ").bold()
@@ -539,6 +552,7 @@ struct CookModeView: View {
         }
         store.saveRecipe(recipe)
         nextTaps += 1
+        movingBack = false
         withAnimation(.snappy) {
             stepIndex += 1
             checkedRows = []
@@ -553,6 +567,7 @@ struct CookModeView: View {
             recipe.setIngredientChecked(index, false)
         }
         store.saveRecipe(recipe)
+        movingBack = true
         withAnimation(.snappy) {
             stepIndex = previous
             checkedRows = []
