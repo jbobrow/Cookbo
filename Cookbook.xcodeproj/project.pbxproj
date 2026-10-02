@@ -7,22 +7,22 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		D65719950EF6A48DF0F78F43 /* CookbookFoldersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */; };
-		ACCD62AE2DDB491D75CC75A6 /* CookbookFolders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C38762D6DE52788DB169B7C /* CookbookFolders.swift */; };
-		F0C11A368A8B4652CD8A31C5 /* Cookbook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A50B367CE7ACD4D440C64C4 /* Cookbook.swift */; };
-		3405513CA6F5C63AB4CC12FD /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA103C360007E0CE64A93FEF /* Category.swift */; };
 		2B720F522F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */; };
 		2B720F532F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */; };
+		3405513CA6F5C63AB4CC12FD /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA103C360007E0CE64A93FEF /* Category.swift */; };
 		7B2B729AD4980D364B7C0C6E /* InstagramParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC14C824BE658B885EC73CA4 /* InstagramParserTests.swift */; };
 		A1F1E4C2D3B5A6978C0D1E2F /* RecipeFileNamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F1E4C2D3B5A6978C0D1E30 /* RecipeFileNamingTests.swift */; };
 		A1F1E4C2D3B5A6978C0D1E31 /* RecipeFileNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F1E4C2D3B5A6978C0D1E32 /* RecipeFileNaming.swift */; };
+		ACCD62AE2DDB491D75CC75A6 /* CookbookFolders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C38762D6DE52788DB169B7C /* CookbookFolders.swift */; };
 		C0FFEEB100000000000000 /* RecipeCollectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB111111111110000 /* RecipeCollectionTests.swift */; };
 		C0FFEEB200000000000001 /* WeekPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB211111111110001 /* WeekPlanTests.swift */; };
 		C0FFEEB300000000000002 /* RecipeCollection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB311111111110002 /* RecipeCollection.swift */; };
 		C0FFEEB400000000000003 /* WeekPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB411111111110003 /* WeekPlan.swift */; };
 		C0FFEEB500000000000004 /* Recipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB511111111110004 /* Recipe.swift */; };
 		CC000000000000000000000E /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000001 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D65719950EF6A48DF0F78F43 /* CookbookFoldersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */; };
 		F0B8B881D22C2B413372F937 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 543D3101572A923451D77D4D /* Foundation.framework */; };
+		F0C11A368A8B4652CD8A31C5 /* Cookbook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A50B367CE7ACD4D440C64C4 /* Cookbook.swift */; };
 		F8F63616CBF0C40478ED1536 /* RecipeParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */; };
 /* End PBXBuildFile section */
 
@@ -58,13 +58,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CookbookFoldersTests.swift; sourceTree = "<group>"; };
-		5C38762D6DE52788DB169B7C /* CookbookFolders.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CookbookFolders.swift; path = Cookbook/Services/CookbookFolders.swift; sourceTree = SOURCE_ROOT; };
 		0A50B367CE7ACD4D440C64C4 /* Cookbook.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Cookbook.swift; path = Cookbook/Models/Cookbook.swift; sourceTree = SOURCE_ROOT; };
-		EA103C360007E0CE64A93FEF /* Category.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Category.swift; path = Cookbook/Models/Category.swift; sourceTree = SOURCE_ROOT; };
 		2B243B9A2F0B11D400840694 /* Cookbo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cookbo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeParserCore.swift; sourceTree = "<group>"; };
 		543D3101572A923451D77D4D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		5C38762D6DE52788DB169B7C /* CookbookFolders.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CookbookFolders.swift; path = Cookbook/Services/CookbookFolders.swift; sourceTree = SOURCE_ROOT; };
 		99965210B2E197AAC6702F05 /* CookbookTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CookbookTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1F1E4C2D3B5A6978C0D1E30 /* RecipeFileNamingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipeFileNamingTests.swift; sourceTree = "<group>"; };
 		A1F1E4C2D3B5A6978C0D1E32 /* RecipeFileNaming.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecipeFileNaming.swift; path = Cookbook/Services/RecipeFileNaming.swift; sourceTree = SOURCE_ROOT; };
@@ -75,6 +73,8 @@
 		C0FFEEB411111111110003 /* WeekPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeekPlan.swift; path = Cookbook/Services/WeekPlan.swift; sourceTree = SOURCE_ROOT; };
 		C0FFEEB511111111110004 /* Recipe.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Recipe.swift; path = Cookbook/Models/Recipe.swift; sourceTree = SOURCE_ROOT; };
 		CC0000000000000000000001 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CookbookFoldersTests.swift; sourceTree = "<group>"; };
+		EA103C360007E0CE64A93FEF /* Category.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Category.swift; path = Cookbook/Models/Category.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -516,7 +516,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = Cookbook/Cookbook.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -550,7 +550,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.4.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook;
 				PRODUCT_NAME = Cookbo;
 				REGISTER_APP_GROUPS = YES;
@@ -581,7 +581,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = Cookbook/Cookbook.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -615,7 +615,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.4.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook;
 				PRODUCT_NAME = Cookbo;
 				REGISTER_APP_GROUPS = YES;
@@ -665,7 +665,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -678,7 +678,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.4.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -696,7 +696,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -709,7 +709,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.4.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
