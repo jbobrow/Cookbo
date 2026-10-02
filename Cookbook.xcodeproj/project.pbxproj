@@ -18,6 +18,8 @@
 		C0FFEEB200000000000001 /* WeekPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB211111111110001 /* WeekPlanTests.swift */; };
 		C0FFEEB300000000000002 /* RecipeCollection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB311111111110002 /* RecipeCollection.swift */; };
 		C0FFEEB400000000000003 /* WeekPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB411111111110003 /* WeekPlan.swift */; };
+		C00C0DE000000000000000A1 /* CookPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B1 /* CookPlanTests.swift */; };
+		C00C0DE000000000000000A2 /* CookPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B2 /* CookPlan.swift */; };
 		C0FFEEB500000000000004 /* Recipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB511111111110004 /* Recipe.swift */; };
 		CC000000000000000000000E /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000001 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D65719950EF6A48DF0F78F43 /* CookbookFoldersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */; };
@@ -70,6 +72,8 @@
 		C0FFEEB111111111110000 /* RecipeCollectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipeCollectionTests.swift; sourceTree = "<group>"; };
 		C0FFEEB211111111110001 /* WeekPlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WeekPlanTests.swift; sourceTree = "<group>"; };
 		C0FFEEB311111111110002 /* RecipeCollection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecipeCollection.swift; path = Cookbook/Models/RecipeCollection.swift; sourceTree = SOURCE_ROOT; };
+		C00C0DE000000000000000B1 /* CookPlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CookPlanTests.swift; sourceTree = "<group>"; };
+		C00C0DE000000000000000B2 /* CookPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CookPlan.swift; path = Cookbook/Services/CookPlan.swift; sourceTree = SOURCE_ROOT; };
 		C0FFEEB411111111110003 /* WeekPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeekPlan.swift; path = Cookbook/Services/WeekPlan.swift; sourceTree = SOURCE_ROOT; };
 		C0FFEEB511111111110004 /* Recipe.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Recipe.swift; path = Cookbook/Models/Recipe.swift; sourceTree = SOURCE_ROOT; };
 		CC0000000000000000000001 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -146,6 +150,7 @@
 				A1F1E4C2D3B5A6978C0D1E30 /* RecipeFileNamingTests.swift */,
 				C0FFEEB111111111110000 /* RecipeCollectionTests.swift */,
 				C0FFEEB211111111110001 /* WeekPlanTests.swift */,
+				C00C0DE000000000000000B1 /* CookPlanTests.swift */,
 				E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */,
 			);
 			path = CookbookTests;
@@ -191,6 +196,7 @@
 				EA103C360007E0CE64A93FEF /* Category.swift */,
 				C0FFEEB311111111110002 /* RecipeCollection.swift */,
 				C0FFEEB411111111110003 /* WeekPlan.swift */,
+				C00C0DE000000000000000B2 /* CookPlan.swift */,
 				C0FFEEB511111111110004 /* Recipe.swift */,
 			);
 			name = "Recovered References";
@@ -366,6 +372,8 @@
 				C0FFEEB200000000000001 /* WeekPlanTests.swift in Sources */,
 				C0FFEEB300000000000002 /* RecipeCollection.swift in Sources */,
 				C0FFEEB400000000000003 /* WeekPlan.swift in Sources */,
+				C00C0DE000000000000000A1 /* CookPlanTests.swift in Sources */,
+				C00C0DE000000000000000A2 /* CookPlan.swift in Sources */,
 				C0FFEEB500000000000004 /* Recipe.swift in Sources */,
 				D65719950EF6A48DF0F78F43 /* CookbookFoldersTests.swift in Sources */,
 				ACCD62AE2DDB491D75CC75A6 /* CookbookFolders.swift in Sources */,

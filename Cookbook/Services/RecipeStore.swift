@@ -622,10 +622,22 @@ class RecipeStore: ObservableObject {
         recipes.removeAll { $0.id == recipe.id }
     }
     
-    func addCookedDate(_ recipe: Recipe) {
+    /// Records today as a cooked date and clears every ingredient and step
+    /// checkmark, ready for next time. Returns the saved recipe.
+    @discardableResult
+    func markCooked(_ recipe: Recipe) -> Recipe {
         var updatedRecipe = recipe
+        for s in updatedRecipe.ingredientSections.indices {
+            for i in updatedRecipe.ingredientSections[s].ingredients.indices {
+                updatedRecipe.ingredientSections[s].ingredients[i].isChecked = false
+            }
+        }
+        for i in updatedRecipe.directions.indices {
+            updatedRecipe.directions[i].isCompleted = false
+        }
         updatedRecipe.datesCooked.append(Date())
         saveRecipe(updatedRecipe)
+        return updatedRecipe
     }
 
     // MARK: - Collections
