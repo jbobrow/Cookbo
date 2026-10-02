@@ -110,6 +110,7 @@ struct RecipeListView: View {
 
     @ViewBuilder
     private var justViewedRow: some View {
+        RunningTimersRow()
         if let recipe = store.lastViewedRecipe {
             NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
                 JustViewedRow(recipe: recipe)

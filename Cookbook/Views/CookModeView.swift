@@ -1,5 +1,4 @@
 import SwiftUI
-import UserNotifications
 
 /// One step at a time, in big type, with the ingredients that step needs.
 /// Next is the only control you need: it checks off the step and the
@@ -11,6 +10,7 @@ import UserNotifications
 struct CookModeView: View {
     @EnvironmentObject private var store: RecipeStore
     @ObservedObject private var plans = CookPlanProvider.shared
+    @ObservedObject private var timerStore = CookTimerStore.shared
     @Binding var recipe: Recipe
     let accentColor: Color
     let enteredByRotation: Bool
@@ -27,9 +27,7 @@ struct CookModeView: View {
     /// Rows checked by hand on this step that aren't a first use (a second
     /// pinch of salt), so they don't touch the recipe's checkmarks.
     @State private var checkedRows: Set<Int> = []
-    @State private var timers: [CookTimer] = []
     @State private var isCooked = false
-    @State private var finishedTimerCount = 0
 
     init(recipe: Binding<Recipe>, accentColor: Color, enteredByRotation: Bool) {
         _recipe = recipe
@@ -80,7 +78,6 @@ struct CookModeView: View {
         .frame(minWidth: 780, minHeight: 480)
         #endif
         .sensoryFeedback(.impact(weight: .medium), trigger: stepIndex)
-        .sensoryFeedback(.warning, trigger: finishedTimerCount)
         .onAppear {
             plans.prepare(recipe)
             #if os(iOS)
@@ -91,7 +88,6 @@ struct CookModeView: View {
             #if os(iOS)
             UIApplication.shared.isIdleTimerDisabled = false
             #endif
-            for timer in timers { CookTimerAlerts.cancel(timer) }
         }
         #if os(iOS)
         .onChange(of: verticalSizeClass) { _, sizeClass in
@@ -122,8 +118,9 @@ struct CookModeView: View {
 
             Spacer(minLength: 0)
 
-            ForEach(timers.filter { $0.step != stepIndex || isFinished }) { timer in
-                runningTimerPill(timer)
+            // Timers from other steps keep running here; only Stop ends one
+            ForEach(timerStore.timers(for: recipe.id).filter { $0.step != stepIndex || isFinished }) { timer in
+                CookTimerPill(timer: timer, tint: accentColor)
             }
 
             Text(isFinished ? "All done" : "Step \(stepIndex + 1) of \(directions.count)")
@@ -442,39 +439,10 @@ struct CookModeView: View {
     @ViewBuilder
     private var timerControl: some View {
         if let duration = currentDuration {
-            if let timer = timers.first(where: { $0.step == stepIndex }) {
-                Button { stopTimer(timer) } label: {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        HStack {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(timer.remainingText(at: context.date))
-                                    .font(.title2.weight(.bold))
-                                    .monospacedDigit()
-                                Text("of \(timer.label)")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 8)
-                            Image(systemName: timer.isDone(at: context.date) ? "checkmark" : "pause.fill")
-                                .font(.footnote.weight(.bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 32)
-                                .background(accentColor, in: Circle())
-                        }
-                        .onChange(of: timer.isDone(at: context.date)) { _, done in
-                            if done { finishedTimerCount += 1 }
-                        }
-                    }
-                    .padding(.leading, 18)
-                    .padding(.trailing, 8)
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .background(accentColor.opacity(0.18), in: Capsule())
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Stop timer")
+            if let timer = timerStore.timer(for: recipe.id, step: stepIndex) {
+                CookTimerBar(timer: timer, tint: accentColor)
             } else {
-                Button { startTimer(duration) } label: {
+                Button { timerStore.start(recipe: recipe, step: stepIndex, duration: duration) } label: {
                     Label {
                         Text("Timer · \(duration.label)")
                     } icon: {
@@ -488,36 +456,6 @@ struct CookModeView: View {
                 .buttonStyle(.plain)
             }
         }
-    }
-
-    private func runningTimerPill(_ timer: CookTimer) -> some View {
-        Button { stopTimer(timer) } label: {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Label(timer.remainingText(at: context.date), systemImage: "timer")
-                    .font(.subheadline.weight(.semibold))
-                    .monospacedDigit()
-                    .padding(.horizontal, 12)
-                    .frame(height: 32)
-                    .background(accentColor.opacity(0.18), in: Capsule())
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Step \(timer.step + 1) timer. Stop timer")
-    }
-
-    private func startTimer(_ duration: CookDuration) {
-        let timer = CookTimer(
-            step: stepIndex,
-            label: duration.label,
-            end: Date().addingTimeInterval(TimeInterval(duration.seconds))
-        )
-        timers.append(timer)
-        CookTimerAlerts.schedule(timer, recipeTitle: recipe.title)
-    }
-
-    private func stopTimer(_ timer: CookTimer) {
-        timers.removeAll { $0.id == timer.id }
-        CookTimerAlerts.cancel(timer)
     }
 
     // MARK: - Finishing
@@ -602,58 +540,7 @@ struct CookModeView: View {
 
     private func markCooked() {
         recipe = store.markCooked(recipe)
-        for timer in timers { CookTimerAlerts.cancel(timer) }
-        timers = []
         withAnimation(.spring(duration: 0.4)) { isCooked = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { dismiss() }
-    }
-}
-
-// MARK: - Timers
-
-struct CookTimer: Identifiable, Equatable {
-    let id = UUID()
-    let step: Int
-    let label: String
-    let end: Date
-
-    func isDone(at date: Date) -> Bool { date >= end }
-
-    func remainingText(at date: Date) -> String {
-        let seconds = max(0, Int(end.timeIntervalSince(date).rounded(.up)))
-        if seconds == 0 { return "Done" }
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        let secs = seconds % 60
-        return hours > 0
-            ? String(format: "%d:%02d:%02d", hours, minutes, secs)
-            : String(format: "%d:%02d", minutes, secs)
-    }
-}
-
-/// A notification for when a timer ends while the app is in the background.
-/// Permission is asked the first time someone starts a timer.
-enum CookTimerAlerts {
-    static func schedule(_ timer: CookTimer, recipeTitle: String) {
-        let interval = timer.end.timeIntervalSinceNow
-        guard interval > 1 else { return }
-        Task {
-            let center = UNUserNotificationCenter.current()
-            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
-            let content = UNMutableNotificationContent()
-            content.title = "Timer done"
-            content.body = "\(recipeTitle) · Step \(timer.step + 1) · \(timer.label)"
-            content.sound = .default
-            let request = UNNotificationRequest(
-                identifier: timer.id.uuidString,
-                content: content,
-                trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
-            )
-            try? await center.add(request)
-        }
-    }
-
-    static func cancel(_ timer: CookTimer) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [timer.id.uuidString])
     }
 }
