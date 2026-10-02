@@ -50,6 +50,10 @@ struct CookbookApp: App {
         // works as Commands from iOS 27, and the app supports older versions.
         #if os(macOS)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                AboutMenuItem()
+            }
+
             CommandGroup(replacing: .newItem) {
                 Button("New Recipe") {
                     recipeStore.shouldShowNewRecipe = true
@@ -82,6 +86,19 @@ struct CookbookApp: App {
         #endif
 
         #if os(macOS)
+        // The same About page as the Cookbooks sheet, in place of the
+        // standard panel
+        Window("About Cookbo", id: AboutMenuItem.windowID) {
+            CookboAboutView()
+                .environmentObject(recipeStore)
+                .preferredColorScheme(appearanceMode.colorScheme)
+                .fixedSize()
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .commandsRemoved()   // keeps it out of the Window menu
+
         Settings {
             AppPreferencesView()
         }
@@ -187,6 +204,16 @@ enum RecipeViewMode: String, CaseIterable, Identifiable {
 }
 
 #if os(macOS)
+/// "About Cookbo" in the app menu, opening the About window.
+struct AboutMenuItem: View {
+    static let windowID = "about"
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("About Cookbo") { openWindow(id: Self.windowID) }
+    }
+}
+
 enum AppearanceMode: String, CaseIterable, Identifiable {
     case system = "System"
     case light = "Light"
