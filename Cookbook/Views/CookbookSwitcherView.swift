@@ -92,14 +92,21 @@ struct CookbookSwitcherView: View {
                     #endif
                 }
 
+                #if os(iOS)
                 Section {
                     SignatureButton { showingAbout = true }
                         .frame(maxWidth: .infinity)
                         .listRowBackground(Color.clear)
                 }
+                #endif
             }
             #if os(macOS)
-            .frame(minWidth: 400, minHeight: 300)
+            // Pinned to the bottom, however few cookbooks there are
+            .safeAreaInset(edge: .bottom) {
+                SignatureButton { showingAbout = true }
+                    .padding(.bottom, 4)
+            }
+            .frame(minWidth: 400, idealWidth: 440, minHeight: 300, idealHeight: 360)
             #endif
             .navigationTitle("Cookbooks")
             #if os(iOS)
@@ -120,9 +127,25 @@ struct CookbookSwitcherView: View {
                     }
                 }
             }
+            #if os(macOS)
+            // Its own sheet: pushed inside this one, macOS gives it an empty
+            // second toolbar row that crowds the page
+            .sheet(isPresented: $showingAbout) {
+                CookboAboutView()
+                    // Under the page rather than in a toolbar, which would
+                    // rule it off
+                    .safeAreaInset(edge: .bottom) {
+                        Button("Done") { showingAbout = false }
+                            .keyboardShortcut(.defaultAction)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding([.horizontal, .bottom], 20)
+                    }
+            }
+            #else
             .navigationDestination(isPresented: $showingAbout) {
                 CookboAboutView()
             }
+            #endif
             .sheet(isPresented: $showingCreateCookbook) {
                 CreateCookbookView()
             }

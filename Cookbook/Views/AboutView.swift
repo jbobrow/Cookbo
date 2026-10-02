@@ -64,6 +64,7 @@ struct AboutView<AppRows: View>: View {
                 header
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
 
             // Skipped when there's nothing for it, rather than left as a gap
@@ -85,9 +86,15 @@ struct AboutView<AppRows: View>: View {
                 footer
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
         }
         .scrollContentBackground(.hidden)
+        #if os(macOS)
+        // A Mac sheet takes its content's ideal size, and a List's is nearly
+        // nothing, so give the page room for its header, rows and signature
+        .frame(minWidth: 400, idealWidth: 440, minHeight: 540, idealHeight: 560)
+        #endif
     }
 
     /// The app's own rows, then sharing and rating it.
@@ -97,6 +104,9 @@ struct AboutView<AppRows: View>: View {
             ShareLink(item: appStore, preview: SharePreview(app.name, image: app.icon)) {
                 AboutRowLabel(title: "Share this app", systemImage: "square.and.arrow.up")
             }
+            #if os(macOS)
+            .buttonStyle(.plain)   // a Mac ShareLink is otherwise a bordered button
+            #endif
             if let review = URL(string: appStore.absoluteString + "?action=write-review") {
                 Link(destination: review) {
                     AboutRowLabel(title: "Rate this app", systemImage: "star")
@@ -146,7 +156,11 @@ struct AboutView<AppRows: View>: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        #if os(macOS)
+        .padding(.top, 20)   // a Mac sheet has no navigation bar above it
+        #else
         .padding(.top, 8)
+        #endif
     }
 
     private var footer: some View {
