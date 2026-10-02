@@ -18,6 +18,9 @@ nonisolated struct CookPlan: Codable, Equatable {
 
     var source: Source
     var steps: [CookStep]
+    /// The on-device model's one-word names, estimates and overlaps for the
+    /// overview, one per step; nil until it has run.
+    var overviewHints: [OverviewHint]? = nil
 
     /// The step where an ingredient (an index into `Recipe.allIngredients`)
     /// first goes in. Next checks it off there.
@@ -461,6 +464,11 @@ nonisolated enum CookPlanner {
     /// "fresh basil leaves" → ["basil leaves", "basil"]; "Kosher salt and
     /// black pepper" → ["salt", "pepper"]; "olive oil" → ["olive oil", "oil"].
     static func searchTerms(for name: String) -> [String] {
+        // "fresh basil + additional for garnish" is basil
+        var name = name
+        for extra in [" + ", "+", " plus "] {
+            if let range = name.range(of: extra, options: .caseInsensitive) { name = String(name[..<range.lowerBound]) }
+        }
         let parts = name.lowercased()
             .replacingOccurrences(of: " or ", with: " and ")
             .components(separatedBy: " and ")
@@ -474,6 +482,10 @@ nonisolated enum CookPlanner {
             if words.count > 1, let last = words.last, containerWords.contains(last) {
                 words.removeLast()
                 terms.append(words.joined(separator: " "))
+            }
+            if words.count > 2 {
+                // "red bell pepper" is also a "bell pepper"
+                terms.append(words.suffix(2).joined(separator: " "))
             }
             if words.count > 1, let last = words.last {
                 terms.append(last)

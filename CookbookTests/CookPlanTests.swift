@@ -74,6 +74,10 @@ final class CookPlanTests: XCTestCase {
         XCTAssertTrue(CookPlanner.parseIngredient("1/2 packed cup fresh basil leaves").terms.contains("basil"))
     }
 
+    func testParseIngredient_extrasAfterAPlusAreNotPartOfTheName() {
+        XCTAssertTrue(CookPlanner.parseIngredient("¼ cup roughly chopped fresh basil + additional for garnish").terms.contains("basil"))
+    }
+
     func testParseIngredient_mixedFraction() {
         XCTAssertEqual(CookPlanner.parseIngredient("1 1/2 cups flour").amount, "1½ cups")
     }

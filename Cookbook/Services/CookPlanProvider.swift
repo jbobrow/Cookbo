@@ -16,7 +16,7 @@ final class CookPlanProvider: ObservableObject {
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
     /// Bumping this drops every cached plan, e.g. after changing the prompt.
-    private static let version = 6
+    private static let version = 8
 
     func plan(for recipe: Recipe) -> CookPlan {
         if keys[recipe.id] == Self.key(for: recipe), let plan = plans[recipe.id] {
@@ -88,6 +88,9 @@ final class CookPlanProvider: ObservableObject {
                 }
                 guard let self, self.keys[id] == key, !Task.isCancelled else { return }
                 self.plans[id] = plan
+            }
+            if let hints = await OnDeviceCookPlanner.suggestOverview(for: recipe), hints.count == plan.steps.count {
+                plan.overviewHints = hints
             }
             plan.source = .onDevice
             guard let self, self.keys[id] == key else { return }

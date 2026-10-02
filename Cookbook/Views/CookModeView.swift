@@ -33,6 +33,10 @@ struct CookModeView: View {
     /// Which way the step text slides: in from the right going forward,
     /// from the left going back.
     @State private var movingBack = false
+    /// The overview or prep screen before step 1, on a fresh start.
+    @State private var introPage: CookIntroView.Page?
+    /// Prep cards checked off, by position in the prep list.
+    @State private var prepped: Set<Int> = []
 
     init(recipe: Binding<Recipe>, accentColor: Color, enteredByRotation: Bool, startStep: Int? = nil) {
         _recipe = recipe
@@ -41,6 +45,18 @@ struct CookModeView: View {
         let steps = recipe.wrappedValue.directions.count
         let start = startStep.map { min(max($0, 0), max(steps - 1, 0)) }
         _stepIndex = State(initialValue: start ?? recipe.wrappedValue.firstIncompleteStepIndex)
+        // Only a fresh start opens on the overview; resuming or a timer's
+        // link goes straight to the step
+        let fresh = startStep == nil && steps > 0 && !recipe.wrappedValue.directions.contains(where: \.isCompleted)
+        _introPage = State(initialValue: fresh ? .overview : nil)
+    }
+
+    private var overview: CookOverview {
+        CookIntroPlanner.overview(for: recipe, plan: plan, hints: plan.overviewHints)
+    }
+
+    private var prepTasks: [PrepTask] {
+        CookIntroPlanner.prepTasks(for: recipe, plan: plan)
     }
 
     private var directions: [Direction] { recipe.orderedDirections }
@@ -65,7 +81,21 @@ struct CookModeView: View {
             VStack(spacing: 12) {
                 topBar
                 progressBar
-                if isCooked {
+                if let page = introPage {
+                    CookIntroView(
+                        page: page,
+                        overview: overview,
+                        prepTasks: prepTasks,
+                        prepped: $prepped,
+                        accentColor: accentColor,
+                        isLandscape: isLandscape,
+                        onNext: introNext,
+                        onBack: { withAnimation(.snappy) { introPage = .overview } },
+                        onSkip: { withAnimation(.snappy) { introPage = nil } }
+                    )
+                    .id(page)
+                    .transition(.opacity)
+                } else if isCooked {
                     cookedView
                 } else if isFinished {
                     finishView(isLandscape: isLandscape)
@@ -98,6 +128,7 @@ struct CookModeView: View {
             guard let request, request.recipeID == recipe.id else { return }
             store.pendingCookStep = nil
             isCooked = false
+            introPage = nil
             withAnimation(.snappy) {
                 stepIndex = min(max(request.step, 0), max(directions.count - 1, 0))
                 checkedRows = []
@@ -148,7 +179,8 @@ struct CookModeView: View {
                 }
             }
 
-            Text(isFinished ? "All done" : "Step \(stepIndex + 1) of \(directions.count)")
+            Text(introPage == .overview ? "Overview" : introPage == .prep ? "Prep"
+                 : isFinished ? "All done" : "Step \(stepIndex + 1) of \(directions.count)")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -158,6 +190,17 @@ struct CookModeView: View {
 
     private var progressBar: some View {
         HStack(spacing: 4) {
+            // Before step 1: the overview and prep get two short segments
+            if let page = introPage {
+                Capsule()
+                    .fill(page == .overview ? AnyShapeStyle(accentColor.opacity(0.35)) : AnyShapeStyle(accentColor))
+                    .frame(width: 28, height: 4)
+                Capsule()
+                    .fill(page == .prep ? AnyShapeStyle(accentColor.opacity(0.35)) : AnyShapeStyle(.fill.tertiary))
+                    .frame(width: 28, height: 4)
+                    .opacity(prepTasks.isEmpty ? 0 : 1)
+                Spacer().frame(width: 6)
+            }
             ForEach(directions.indices, id: \.self) { index in
                 Capsule()
                     .fill(index < stepIndex ? AnyShapeStyle(accentColor)
@@ -524,8 +567,6 @@ struct CookModeView: View {
         }
         .buttonStyle(.plain)
         .keyboardShortcut(.leftArrow, modifiers: [])
-        .disabled(stepIndex == 0)
-        .opacity(stepIndex == 0 ? 0.35 : 1)
         .accessibilityLabel("Previous Step")
     }
 
@@ -576,7 +617,11 @@ struct CookModeView: View {
     }
 
     private func goBack() {
-        guard stepIndex > 0 else { return }
+        // Back from step 1 returns to the screens before it
+        guard stepIndex > 0 else {
+            withAnimation(.snappy) { introPage = prepTasks.isEmpty ? .overview : .prep }
+            return
+        }
         let previous = stepIndex - 1
         // The step is open again, but what's been added stays checked off
         recipe.setStepCompleted(previous, false)
@@ -585,6 +630,12 @@ struct CookModeView: View {
         withAnimation(.snappy) {
             stepIndex = previous
             checkedRows = []
+        }
+    }
+
+    private func introNext() {
+        withAnimation(.snappy) {
+            introPage = introPage == .overview && !prepTasks.isEmpty ? .prep : nil
         }
     }
 

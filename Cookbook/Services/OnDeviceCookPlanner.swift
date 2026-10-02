@@ -80,6 +80,74 @@ enum OnDeviceCookPlanner {
 }
 
 @available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
+extension OnDeviceCookPlanner {
+    /// For the overview: a one-word name per step, an estimate where the step
+    /// gives no time, and which earlier step it happens alongside.
+    static func suggestOverview(for recipe: Recipe) async -> [OverviewHint]? {
+        let steps = recipe.orderedDirections
+        guard !steps.isEmpty else { return nil }
+        let directions = steps.enumerated()
+            .map { "\($0.offset + 1). \($0.element.text.sanitizedForDisplay)" }
+            .joined(separator: "\n")
+        let session = LanguageModelSession(instructions: """
+            You summarize recipes for a timeline that shows each step as one short bar.
+            Use only what the recipe says.
+            """)
+        let prompt = """
+            Recipe: \(recipe.title)
+
+            Steps:
+            \(directions)
+
+            For each of the \(steps.count) steps, in order, give:
+            - one word for its main action, like Sauté, Bake, Layer, Rest, Simmer or Whisk; give back-to-back steps that are one action the same word, like Layer for each layer of a lasagna
+            - how many minutes it takes if the step doesn't say, as your best estimate; 0 if the step gives a time
+            - the number of an earlier step it happens at the same time as, like a sauce made meanwhile or an oven preheating; 0 if none
+            """
+        do {
+            let response = try await session.respond(
+                to: prompt,
+                generating: GeneratedOverview.self,
+                options: GenerationOptions(temperature: 0.2)
+            )
+            let byStep = Dictionary(response.content.steps.map { ($0.stepNumber, $0) }, uniquingKeysWith: { first, _ in first })
+            return steps.indices.map { index in
+                guard let step = byStep[index + 1] else { return OverviewHint(word: "", minutes: 0, alongsideStep: 0) }
+                return OverviewHint(word: step.word, minutes: step.minutes, alongsideStep: step.alongsideStep)
+            }
+        } catch {
+            #if DEBUG
+            print("Cook mode: on-device model skipped the overview: \(error)")
+            #endif
+            return nil
+        }
+    }
+}
+
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
+@Generable
+nonisolated struct GeneratedOverview {
+    @Guide(description: "One entry per step, in order.")
+    var steps: [GeneratedOverviewStep]
+}
+
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
+@Generable
+nonisolated struct GeneratedOverviewStep {
+    @Guide(description: "The step's number.")
+    var stepNumber: Int
+
+    @Guide(description: "One word for the step's main action, such as Sauté or Bake.")
+    var word: String
+
+    @Guide(description: "Estimated minutes if the step gives no time, otherwise 0.")
+    var minutes: Int
+
+    @Guide(description: "The number of an earlier step this happens at the same time as, or 0.")
+    var alongsideStep: Int
+}
+
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
 @Generable
 nonisolated struct GeneratedCookStep {
     @Guide(description: "The step rewritten to be short and easy to read at a glance, keeping every number exactly as written. Empty if the step is already short.")
