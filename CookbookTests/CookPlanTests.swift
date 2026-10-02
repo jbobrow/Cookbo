@@ -135,11 +135,16 @@ final class CookPlanTests: XCTestCase {
         let ranged = CookPlanner.durations(in: soup.directions[0].text)
         XCTAssertEqual(ranged.map(\.label), ["20–25 min"])
         XCTAssertEqual(ranged.first?.seconds, 1200)
+        XCTAssertEqual(ranged.first?.extraSeconds, 300, "the rest of the 20 to 25 minute range")
 
         let about = CookPlanner.durations(in: soup.directions[3].text)
         XCTAssertEqual(about.map(\.label), ["20 min"])
+        XCTAssertEqual(CookPlanner.durations(in: "Bake 30 to 45 minutes.").first?.extraSeconds, 900)
 
         XCTAssertEqual(CookPlanner.durations(in: "Bake for 1 hour.").first?.seconds, 3600)
+        // The tappable time is the time itself, not "for" or "another" before it
+        let text = "Cook another 5 to 10 minutes, then bake for 1 hour, about 20 minutes more."
+        XCTAssertEqual(CookPlanner.durations(in: text).map { String(text[$0.range]) }, ["5 to 10 minutes", "1 hour", "about 20 minutes"])
         XCTAssertTrue(CookPlanner.durations(in: "Add 3 cups of water.").isEmpty)
     }
 

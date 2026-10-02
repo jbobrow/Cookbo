@@ -3,7 +3,6 @@ import EventKit
 
 struct RecipeDetailView: View {
     @EnvironmentObject var store: RecipeStore
-    @ObservedObject private var timerStore = CookTimerStore.shared
     @State var recipe: Recipe
     @State private var showingEditSheet = false
     @State private var showingDeleteConfirmation = false
@@ -162,19 +161,6 @@ struct RecipeDetailView: View {
                                 .foregroundColor(.secondary)
                         }
                         #endif
-
-                        // Timers keep running after cook mode closes
-                        let timers = timerStore.timers(for: recipe.id)
-                        if !timers.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(timers) { timer in
-                                        CookTimerPill(timer: timer, tint: accentColor)
-                                    }
-                                }
-                            }
-                            .padding(.top, 4)
-                        }
                     }
                 }
                 

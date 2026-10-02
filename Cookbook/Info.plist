@@ -28,6 +28,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Cookbo uses alarms so a cooking timer rings even when your phone is locked or on silent.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSUbiquitousContainers</key>
 	<dict>
 		<key>iCloud.com.jonbobrow.Cookbook</key>

@@ -67,6 +67,15 @@ nonisolated struct CookDuration: Equatable {
     var label: String
     /// The low end, so a timer never runs past the earliest check.
     var seconds: Int
+    /// The high end of a range ("20 to 25 minutes"), if there is one.
+    var upperSeconds: Int? = nil
+
+    /// How long "More Minutes" adds once the timer goes off: the rest of the
+    /// recipe's range, or 5 minutes.
+    var extraSeconds: Int {
+        if let upper = upperSeconds, upper > seconds { return upper - seconds }
+        return 300
+    }
 }
 
 /// What the on-device model suggested for one step, before it's checked
@@ -540,7 +549,7 @@ nonisolated enum CookPlanner {
     /// Cooking times like "about 20 minutes" or "5 to 10 minutes".
     static func durations(in text: String) -> [CookDuration] {
         let regex = try! NSRegularExpression(
-            pattern: #"\b(?:(?:about|around|another|roughly|for)\s+)?(\d+(?:\.\d+)?)(?:\s*(?:to|-|–|or)\s*(\d+(?:\.\d+)?))?\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?)\b"#,
+            pattern: #"\b(?:(?:about|around|roughly)\s+)?(\d+(?:\.\d+)?)(?:\s*(?:to|-|–|or)\s*(\d+(?:\.\d+)?))?\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?)\b"#,
             options: [.caseInsensitive]
         )
         let ns = text as NSString
@@ -552,7 +561,8 @@ nonisolated enum CookPlanner {
             let (short, multiplier): (String, Double) = unit.hasPrefix("h") ? ("hr", 3600) : unit.hasPrefix("s") ? ("sec", 1) : ("min", 60)
             let lowText = ns.substring(with: match.range(at: 1))
             let label = high.map { "\(lowText)–\($0) \(short)" } ?? "\(lowText) \(short)"
-            return CookDuration(range: range, label: label, seconds: Int(low * multiplier))
+            let upper = high.flatMap(Double.init).map { Int($0 * multiplier) }
+            return CookDuration(range: range, label: label, seconds: Int(low * multiplier), upperSeconds: upper)
         }
     }
 

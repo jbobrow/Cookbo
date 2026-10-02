@@ -22,12 +22,14 @@ struct CookModeView: View {
     #endif
     @AppStorage("cookModeShowsShortSteps") private var prefersShortSteps = true
     @AppStorage("cookModeNextTaps") private var nextTaps = 0
+    @AppStorage("cookModeStartedTimer") private var hasStartedTimer = false
 
     @State private var stepIndex: Int
     /// Rows checked by hand on this step that aren't a first use (a second
     /// pinch of salt), so they don't touch the recipe's checkmarks.
     @State private var checkedRows: Set<Int> = []
     @State private var isCooked = false
+    @State private var timerToStop: CookTimer?
 
     init(recipe: Binding<Recipe>, accentColor: Color, enteredByRotation: Bool) {
         _recipe = recipe
@@ -119,8 +121,12 @@ struct CookModeView: View {
             Spacer(minLength: 0)
 
             // Timers from other steps keep running here; only Stop ends one
-            ForEach(timerStore.timers(for: recipe.id).filter { $0.step != stepIndex || isFinished }) { timer in
-                CookTimerPill(timer: timer, tint: accentColor)
+            // The Dynamic Island and lock screen show system timers; without
+            // them, timers from other steps show here
+            if !timerStore.systemShowsTimers {
+                ForEach(timerStore.timers(for: recipe.id).filter { $0.step != stepIndex || isFinished }) { timer in
+                    CookTimerPill(timer: timer, tint: accentColor)
+                }
             }
 
             Text(isFinished ? "All done" : "Step \(stepIndex + 1) of \(directions.count)")
@@ -153,7 +159,6 @@ struct CookModeView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ingredientList
                     Spacer(minLength: 0)
-                    timerControl
                 }
                 .frame(width: 228 * min(scale, 1.3), alignment: .leading)
                 .frame(maxHeight: .infinity, alignment: .top)
@@ -190,8 +195,6 @@ struct CookModeView: View {
 
             stepText(size: fontSize(landscape: false) * scale)
 
-            timerControl
-
             HStack(spacing: 12) {
                 backButton(compact: true)
                 nextButton(fullWidth: true)
@@ -207,21 +210,57 @@ struct CookModeView: View {
     }
 
     private func stepText(size: CGFloat) -> some View {
-        Text(styledText(currentText, step: currentStep))
+        let durations = CookPlanner.durations(in: currentText)
+        let hasTimer = durations.contains { timerStore.timer(for: recipe.id, step: stepIndex, label: $0.label) != nil }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Group {
+                if hasTimer {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        stepTextBody(size: size, durations: durations, now: context.date)
+                    }
+                } else {
+                    stepTextBody(size: size, durations: durations, now: Date())
+                }
+            }
+            .environment(\.openURL, OpenURLAction { url in
+                handleTimerLink(url, durations: durations)
+            })
+
+            if !hasStartedTimer, !durations.isEmpty {
+                Label("Tap a cooking time to start a timer", systemImage: "timer")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .id(stepIndex)
+        .transition(.asymmetric(
+            insertion: .move(edge: .trailing).combined(with: .opacity),
+            removal: .opacity
+        ))
+        .confirmationDialog("Stop this timer?", isPresented: Binding(
+            get: { timerToStop != nil },
+            set: { if !$0 { timerToStop = nil } }
+        ), titleVisibility: .visible, presenting: timerToStop) { timer in
+            Button("Stop Timer", role: .destructive) { timerStore.stop(timer) }
+            Button("Keep Running", role: .cancel) { }
+        } message: { timer in
+            Text("Step \(timer.step + 1) · \(timer.label)")
+        }
+    }
+
+    private func stepTextBody(size: CGFloat, durations: [CookDuration], now: Date) -> some View {
+        Text(styledText(currentText, step: currentStep, durations: durations, now: now))
             .font(.system(size: size, weight: .medium))
             .lineSpacing(size * 0.08)
             .minimumScaleFactor(0.5)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .id(stepIndex)
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .opacity
-            ))
             .accessibilityAddTraits(.isHeader)
     }
 
-    /// Ingredients get a tinted background, cooking times a dotted underline.
-    private func styledText(_ text: String, step: CookStep) -> AttributedString {
+    /// Ingredients get a tinted background. Cooking times are links that start
+    /// a timer, and a running timer's countdown follows its cooking time.
+    private func styledText(_ text: String, step: CookStep, durations: [CookDuration], now: Date) -> AttributedString {
         var styled = AttributedString(text)
         func attributedRange(_ range: Range<String.Index>) -> Range<AttributedString.Index> {
             let lower = styled.index(styled.startIndex, offsetByCharacters: text.distance(from: text.startIndex, to: range.lowerBound))
@@ -233,12 +272,40 @@ struct CookModeView: View {
             styled[r].backgroundColor = accentColor.opacity(colorScheme == .dark ? 0.45 : 0.22)
             styled[r].inlinePresentationIntent = .stronglyEmphasized
         }
-        for duration in CookPlanner.durations(in: text) {
+        // Back to front, so inserting a countdown doesn't move the earlier ranges
+        for (index, duration) in durations.enumerated().reversed() {
             let r = attributedRange(duration.range)
             styled[r].underlineStyle = Text.LineStyle(pattern: .dot, color: accentColor)
             styled[r].inlinePresentationIntent = .stronglyEmphasized
+            styled[r].link = URL(string: "cookbo-timer://step/\(index)")
+
+            if let timer = timerStore.timer(for: recipe.id, step: stepIndex, label: duration.label) {
+                let remaining = timer.isPaused ? "Paused \(timer.remainingText(at: now))" : timer.remainingText(at: now)
+                var countdown = AttributedString("\u{00A0}\u{00A0}\(remaining)\u{00A0}\u{00A0}")
+                countdown.foregroundColor = .white
+                countdown.backgroundColor = accentColor
+                countdown.inlinePresentationIntent = .stronglyEmphasized
+                countdown.font = .system(size: 22, weight: .bold).monospacedDigit()
+                styled.insert(countdown, at: r.upperBound)
+                styled.insert(AttributedString(" "), at: r.upperBound)
+            }
         }
         return styled
+    }
+
+    /// A tap on a cooking time starts its timer, or offers to stop it.
+    private func handleTimerLink(_ url: URL, durations: [CookDuration]) -> OpenURLAction.Result {
+        guard url.scheme == "cookbo-timer",
+              let index = Int(url.lastPathComponent),
+              durations.indices.contains(index) else { return .systemAction }
+        let duration = durations[index]
+        if let timer = timerStore.timer(for: recipe.id, step: stepIndex, label: duration.label) {
+            timerToStop = timer
+        } else {
+            timerStore.start(recipe: recipe, step: stepIndex, duration: duration)
+            hasStartedTimer = true
+        }
+        return .handled
     }
 
     // MARK: - Ingredients
@@ -426,35 +493,6 @@ struct CookModeView: View {
         withAnimation(.snappy) {
             stepIndex = previous
             checkedRows = []
-        }
-    }
-
-    // MARK: - Timers
-
-    private var currentDuration: CookDuration? {
-        guard directions.indices.contains(stepIndex) else { return nil }
-        return CookPlanner.durations(in: directions[stepIndex].text.sanitizedForDisplay).first
-    }
-
-    @ViewBuilder
-    private var timerControl: some View {
-        if let duration = currentDuration {
-            if let timer = timerStore.timer(for: recipe.id, step: stepIndex) {
-                CookTimerBar(timer: timer, tint: accentColor)
-            } else {
-                Button { timerStore.start(recipe: recipe, step: stepIndex, duration: duration) } label: {
-                    Label {
-                        Text("Timer · \(duration.label)")
-                    } icon: {
-                        Image(systemName: "timer").foregroundStyle(accentColor)
-                    }
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .background(.fill.tertiary, in: Capsule())
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
         }
     }
 

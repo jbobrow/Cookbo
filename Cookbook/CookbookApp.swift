@@ -44,6 +44,9 @@ struct CookbookApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 checkForSharedURL()
+                // Starts the timer store, which catches up with anything that
+                // happened to cook mode timers while the app wasn't running
+                _ = CookTimerStore.shared
             }
         }
         // Mac only. On iOS an empty .commands {} builds an EmptyView, which only
