@@ -1,1 +1,4 @@
 build/
+
+# App Store screenshot generator and exports (kept local)
+AppStore/

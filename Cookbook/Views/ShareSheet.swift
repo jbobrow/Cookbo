@@ -1,5 +1,28 @@
 import SwiftUI
 
+/// What sharing a recipe sends: its source link, so it can be texted and opens
+/// anywhere. A recipe with no link (one typed in by hand) goes as its Markdown file.
+enum RecipeShareItems {
+    static func items(for recipe: Recipe) -> [Any]? {
+        if let url = URL(string: recipe.sourceURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+           let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+            return [url]
+        }
+
+        let fileName = "\(recipe.title.replacingOccurrences(of: " ", with: "_")).md"
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        do {
+            try RecipeMarkdownSerializer.serialize(recipe).write(to: fileURL, atomically: true, encoding: .utf8)
+            return [fileURL]
+        } catch {
+            #if DEBUG
+            print("Error sharing recipe: \(error)")
+            #endif
+            return nil
+        }
+    }
+}
+
 #if os(iOS)
 import UIKit
 

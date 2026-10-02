@@ -556,49 +556,38 @@ struct RecipeDetailView: View {
     }
 
     private func shareRecipe() {
-        // Create temporary Markdown file for sharing
-        let tempDir = FileManager.default.temporaryDirectory
-        let fileName = "\(recipe.title.replacingOccurrences(of: " ", with: "_")).md"
-        let fileURL = tempDir.appendingPathComponent(fileName)
+        guard let items = RecipeShareItems.items(for: recipe) else { return }
 
-        do {
-            let markdown = RecipeMarkdownSerializer.serialize(recipe)
-            try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
+        #if os(iOS)
+        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
 
-            // Present share sheet
-            #if os(iOS)
-            let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
-
-            // Configure popover presentation for iPad
-            if UIDevice.current.userInterfaceIdiom == .pad {
-                if let popover = activityVC.popoverPresentationController {
-                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                       let window = windowScene.windows.first {
-                        popover.sourceView = window
-                        popover.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
-                        popover.permittedArrowDirections = []
-                    }
+        // Configure popover presentation for iPad
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            if let popover = activityVC.popoverPresentationController {
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let window = windowScene.windows.first {
+                    popover.sourceView = window
+                    popover.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
+                    popover.permittedArrowDirections = []
                 }
             }
-
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let window = windowScene.windows.first,
-               let rootVC = window.rootViewController {
-                var topVC = rootVC
-                while let presentedVC = topVC.presentedViewController {
-                    topVC = presentedVC
-                }
-                topVC.present(activityVC, animated: true)
-            }
-            #elseif os(macOS)
-            let picker = NSSharingServicePicker(items: [fileURL])
-            if let view = NSApplication.shared.keyWindow?.contentView {
-                picker.show(relativeTo: .zero, of: view, preferredEdge: .minY)
-            }
-            #endif
-        } catch {
-            print("Error sharing recipe: \(error)")
         }
+
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first,
+           let rootVC = window.rootViewController {
+            var topVC = rootVC
+            while let presentedVC = topVC.presentedViewController {
+                topVC = presentedVC
+            }
+            topVC.present(activityVC, animated: true)
+        }
+        #elseif os(macOS)
+        let picker = NSSharingServicePicker(items: items)
+        if let view = NSApplication.shared.keyWindow?.contentView {
+            picker.show(relativeTo: .zero, of: view, preferredEdge: .minY)
+        }
+        #endif
     }
 
     private func deleteRecipe() {
