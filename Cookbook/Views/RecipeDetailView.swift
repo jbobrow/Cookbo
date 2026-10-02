@@ -17,9 +17,6 @@ struct RecipeDetailView: View {
     @State private var cookingEnteredByRotation = false
     @State private var isVisible = false
     @Environment(\.dismiss) private var dismiss
-    #if os(iOS)
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    #endif
     #if os(macOS)
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
     #endif
@@ -454,10 +451,11 @@ struct RecipeDetailView: View {
         }
         .onDisappear { isVisible = false }
         #if os(iOS)
-        .onChange(of: verticalSizeClass) { _, sizeClass in
-            // Turning an iPhone sideways on a recipe opens cook mode; turning
-            // it back closes it (handled in CookModeView).
-            guard sizeClass == .compact,
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            // The recipe page stays upright on iPhone, so watch the phone
+            // itself: turning it sideways opens cook mode, and turning it back
+            // closes it (handled in CookModeView).
+            guard UIDevice.current.orientation.isLandscape,
                   UIDevice.current.userInterfaceIdiom == .phone,
                   isVisible, !isCooking, !showingEditSheet, editingCategory == nil,
                   !recipe.directions.isEmpty else { return }

@@ -19,6 +19,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct CookbookApp: App {
     @StateObject private var recipeStore = RecipeStore()
     @Environment(\.scenePhase) private var scenePhase
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    #endif
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system

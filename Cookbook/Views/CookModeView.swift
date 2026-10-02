@@ -90,6 +90,7 @@ struct CookModeView: View {
             plans.prepare(recipe)
             #if os(iOS)
             UIApplication.shared.isIdleTimerDisabled = true
+            OrientationLock.cookModeOpened()
             #endif
         }
         .onChange(of: store.pendingCookStep) { _, request in
@@ -106,6 +107,7 @@ struct CookModeView: View {
             if store.cookingRecipeID == recipe.id { store.cookingRecipeID = nil }
             #if os(iOS)
             UIApplication.shared.isIdleTimerDisabled = false
+            OrientationLock.cookModeClosed()
             #endif
         }
         #if os(iOS)
@@ -172,7 +174,7 @@ struct CookModeView: View {
 
     private func landscapeStep(scale: CGFloat) -> some View {
         VStack(spacing: 12) {
-            HStack(alignment: .top, spacing: 28) {
+            HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: 8) {
                     ingredientList
                     Spacer(minLength: 0)
@@ -184,7 +186,10 @@ struct CookModeView: View {
                     Rectangle().fill(.separator).frame(width: 1)
                 }
 
-                stepText(size: fontSize(landscape: true) * scale)
+                // Sliding step text is masked at the rule, not drawn over the
+                // ingredients (taller than the column so highlights aren't cut)
+                slidingStepText(size: fontSize(landscape: true) * scale)
+                    .padding(.leading, 28)
             }
             .frame(maxHeight: .infinity)
 
@@ -210,7 +215,7 @@ struct CookModeView: View {
 
             shortTextToggle
 
-            stepText(size: fontSize(landscape: false) * scale)
+            slidingStepText(size: fontSize(landscape: false) * scale)
 
             HStack(spacing: 12) {
                 backButton(compact: true)
@@ -255,11 +260,6 @@ struct CookModeView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .id(stepIndex)
-        .transition(.asymmetric(
-            insertion: .move(edge: movingBack ? .leading : .trailing).combined(with: .opacity),
-            removal: .opacity
-        ))
         .alert("Stop this timer?", isPresented: Binding(
             get: { timerToStop != nil },
             set: { if !$0 { timerToStop = nil } }
@@ -269,6 +269,22 @@ struct CookModeView: View {
         } message: { timer in
             Text("Step \(timer.step + 1) · \(timer.label)")
         }
+    }
+
+    /// The step's text, replaced with a slide when the step changes. The slide
+    /// happens inside a clipped box, so in landscape the incoming text is cut
+    /// off at the rule instead of passing over the ingredients.
+    private func slidingStepText(size: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            stepText(size: size)
+                .id(stepIndex)
+                .transition(.asymmetric(
+                    insertion: .move(edge: movingBack ? .leading : .trailing).combined(with: .opacity),
+                    removal: .opacity
+                ))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
     }
 
     /// Timers are the system's, so they use the system's blue rather than
