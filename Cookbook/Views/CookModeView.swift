@@ -125,7 +125,7 @@ struct CookModeView: View {
             // them, timers from other steps show here
             if !timerStore.systemShowsTimers {
                 ForEach(timerStore.timers(for: recipe.id).filter { $0.step != stepIndex || isFinished }) { timer in
-                    CookTimerPill(timer: timer, tint: accentColor)
+                    CookTimerPill(timer: timer, tint: Self.timerTint)
                 }
             }
 
@@ -228,9 +228,13 @@ struct CookModeView: View {
             })
 
             if !hasStartedTimer, !durations.isEmpty {
-                Label("Tap a cooking time to start a timer", systemImage: "timer")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                Label {
+                    Text("Tap a cooking time to start a timer")
+                } icon: {
+                    Image(systemName: "timer").foregroundStyle(Self.timerTint)
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -239,10 +243,10 @@ struct CookModeView: View {
             insertion: .move(edge: .trailing).combined(with: .opacity),
             removal: .opacity
         ))
-        .confirmationDialog("Stop this timer?", isPresented: Binding(
+        .alert("Stop this timer?", isPresented: Binding(
             get: { timerToStop != nil },
             set: { if !$0 { timerToStop = nil } }
-        ), titleVisibility: .visible, presenting: timerToStop) { timer in
+        ), presenting: timerToStop) { timer in
             Button("Stop Timer", role: .destructive) { timerStore.stop(timer) }
             Button("Keep Running", role: .cancel) { }
         } message: { timer in
@@ -250,17 +254,34 @@ struct CookModeView: View {
         }
     }
 
+    /// Timers are the system's, so they use the system's blue rather than
+    /// the recipe's category color.
+    static let timerTint = Color.blue
+
+    @ViewBuilder
     private func stepTextBody(size: CGFloat, durations: [CookDuration], now: Date) -> some View {
-        Text(styledText(currentText, step: currentStep, durations: durations, now: now))
-            .font(.system(size: size, weight: .medium))
-            .lineSpacing(size * 0.08)
-            .minimumScaleFactor(0.5)
-            .accessibilityAddTraits(.isHeader)
+        let roundedPills: Bool = {
+            if #available(iOS 18.0, macOS 15.0, visionOS 2.0, *) { return true }
+            return false
+        }()
+        let text = composedText(currentText, step: currentStep, durations: durations, now: now, size: size, roundedPills: roundedPills)
+        Group {
+            if #available(iOS 18.0, macOS 15.0, visionOS 2.0, *) {
+                text.textRenderer(TimerPillRenderer(fill: Self.timerTint))
+            } else {
+                text
+            }
+        }
+        .font(.system(size: size, weight: .medium))
+        .lineSpacing(size * 0.08)
+        .minimumScaleFactor(0.5)
+        .accessibilityAddTraits(.isHeader)
     }
 
-    /// Ingredients get a tinted background. Cooking times are links that start
-    /// a timer, and a running timer's countdown follows its cooking time.
-    private func styledText(_ text: String, step: CookStep, durations: [CookDuration], now: Date) -> AttributedString {
+    /// Ingredients get a tinted background. Each cooking time is a link that
+    /// starts a timer, marked with a timer icon; once running, a countdown pill
+    /// follows it.
+    private func composedText(_ text: String, step: CookStep, durations: [CookDuration], now: Date, size: CGFloat, roundedPills: Bool) -> Text {
         var styled = AttributedString(text)
         func attributedRange(_ range: Range<String.Index>) -> Range<AttributedString.Index> {
             let lower = styled.index(styled.startIndex, offsetByCharacters: text.distance(from: text.startIndex, to: range.lowerBound))
@@ -272,25 +293,48 @@ struct CookModeView: View {
             styled[r].backgroundColor = accentColor.opacity(colorScheme == .dark ? 0.45 : 0.22)
             styled[r].inlinePresentationIntent = .stronglyEmphasized
         }
-        // Back to front, so inserting a countdown doesn't move the earlier ranges
-        for (index, duration) in durations.enumerated().reversed() {
+
+        var result = Text("")
+        var cursor = styled.startIndex
+        for (index, duration) in durations.enumerated() {
             let r = attributedRange(duration.range)
-            styled[r].underlineStyle = Text.LineStyle(pattern: .dot, color: accentColor)
-            styled[r].inlinePresentationIntent = .stronglyEmphasized
-            styled[r].link = URL(string: "cookbo-timer://step/\(index)")
+            result = Text("\(result)\(Text(AttributedString(styled[cursor..<r.lowerBound])))")
+
+            var time = AttributedString(styled[r])
+            let link = URL(string: "cookbo-timer://step/\(index)")
+            time.link = link
+            time.foregroundColor = Self.timerTint
+            time.underlineStyle = Text.LineStyle(pattern: .dot, color: Self.timerTint)
+            time.inlinePresentationIntent = .stronglyEmphasized
+            result = Text("\(result)\(Text(time))")
 
             if let timer = timerStore.timer(for: recipe.id, step: stepIndex, label: duration.label) {
                 let remaining = timer.isPaused ? "Paused \(timer.remainingText(at: now))" : timer.remainingText(at: now)
-                var countdown = AttributedString("\u{00A0}\u{00A0}\(remaining)\u{00A0}\u{00A0}")
-                countdown.foregroundColor = .white
-                countdown.backgroundColor = accentColor
-                countdown.inlinePresentationIntent = .stronglyEmphasized
-                countdown.font = .system(size: 22, weight: .bold).monospacedDigit()
-                styled.insert(countdown, at: r.upperBound)
-                styled.insert(AttributedString(" "), at: r.upperBound)
+                var digits = AttributedString("\u{2009}\(remaining)\u{2009}\u{2009}")
+                digits.link = link
+                digits.foregroundColor = .white
+                if !roundedPills { digits.backgroundColor = Self.timerTint }
+                let pill = Text("\u{2009}\u{2009}\(Image(systemName: "timer"))\(digits)")
+                    .font(.system(size: size * 0.68, weight: .bold).monospacedDigit())
+                    .foregroundColor(.white)
+                    .baselineOffset(size * 0.1)
+                result = Text("\(result) \(pillMarked(pill, roundedPills: roundedPills))")
+            } else {
+                let icon = Text(Image(systemName: "timer"))
+                    .font(.system(size: size * 0.8, weight: .semibold))
+                    .foregroundColor(Self.timerTint)
+                result = Text("\(result)\u{2009}\(icon)")
             }
+            cursor = r.upperBound
         }
-        return styled
+        return Text("\(result)\(Text(AttributedString(styled[cursor...])))")
+    }
+
+    private func pillMarked(_ text: Text, roundedPills: Bool) -> Text {
+        if #available(iOS 18.0, macOS 15.0, visionOS 2.0, *), roundedPills {
+            return text.customAttribute(TimerPillAttribute())
+        }
+        return text
     }
 
     /// A tap on a cooking time starts its timer, or offers to stop it.
@@ -580,5 +624,36 @@ struct CookModeView: View {
         recipe = store.markCooked(recipe)
         withAnimation(.spring(duration: 0.4)) { isCooked = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { dismiss() }
+    }
+}
+
+// MARK: - Countdown pill
+
+/// Marks the countdown that follows a cooking time.
+@available(iOS 18.0, macOS 15.0, visionOS 2.0, *)
+struct TimerPillAttribute: TextAttribute {}
+
+/// Draws a capsule behind each countdown, which text attributes alone can't
+/// do (their backgrounds are square).
+@available(iOS 18.0, macOS 15.0, visionOS 2.0, *)
+struct TimerPillRenderer: TextRenderer {
+    var fill: Color
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        for line in layout {
+            // A pill is several runs (icon, digits); one capsule covers them all
+            var pill: CGRect?
+            for run in line where run[TimerPillAttribute.self] != nil {
+                let bounds = run.typographicBounds.rect
+                pill = pill.map { $0.union(bounds) } ?? bounds
+            }
+            if let pill {
+                let rect = pill.insetBy(dx: 0, dy: -2)
+                context.fill(Capsule().path(in: rect), with: .color(fill))
+            }
+            for run in line {
+                context.draw(run)
+            }
+        }
     }
 }
