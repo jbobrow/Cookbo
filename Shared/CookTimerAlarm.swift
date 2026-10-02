@@ -9,7 +9,15 @@ import Foundation
 
 @available(iOS 26.0, *)
 nonisolated struct CookTimerMetadata: AlarmMetadata {
+    /// Opens cook mode at this timer's step.
+    var url: URL? {
+        guard let recipeID else { return nil }
+        return URL(string: "cookbook://cook?recipe=\(recipeID.uuidString)&step=\(stepNumber)")
+    }
+
     var recipeTitle: String
+    /// For the link back into cook mode; nil on timers started before it existed
+    var recipeID: UUID? = nil
     var stepNumber: Int
     /// "20–25 min"
     var label: String

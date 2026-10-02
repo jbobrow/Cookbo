@@ -109,6 +109,10 @@ struct CookbookApp: App {
     }
 
     private func handleIncomingURL(_ url: URL) {
+        if let request = CookStepRequest(url: url) {
+            recipeStore.pendingCookStep = request
+            return
+        }
         // Handle cookbook://import?url=<encoded-url>
         guard url.scheme == "cookbook",
               url.host == "import",

@@ -31,11 +31,13 @@ struct CookModeView: View {
     @State private var isCooked = false
     @State private var timerToStop: CookTimer?
 
-    init(recipe: Binding<Recipe>, accentColor: Color, enteredByRotation: Bool) {
+    init(recipe: Binding<Recipe>, accentColor: Color, enteredByRotation: Bool, startStep: Int? = nil) {
         _recipe = recipe
         self.accentColor = accentColor
         self.enteredByRotation = enteredByRotation
-        _stepIndex = State(initialValue: recipe.wrappedValue.firstIncompleteStepIndex)
+        let steps = recipe.wrappedValue.directions.count
+        let start = startStep.map { min(max($0, 0), max(steps - 1, 0)) }
+        _stepIndex = State(initialValue: start ?? recipe.wrappedValue.firstIncompleteStepIndex)
     }
 
     private var directions: [Direction] { recipe.orderedDirections }
@@ -81,12 +83,24 @@ struct CookModeView: View {
         #endif
         .sensoryFeedback(.impact(weight: .medium), trigger: stepIndex)
         .onAppear {
+            store.cookingRecipeID = recipe.id
             plans.prepare(recipe)
             #if os(iOS)
             UIApplication.shared.isIdleTimerDisabled = true
             #endif
         }
+        .onChange(of: store.pendingCookStep) { _, request in
+            // A timer's Live Activity for this recipe was tapped
+            guard let request, request.recipeID == recipe.id else { return }
+            store.pendingCookStep = nil
+            isCooked = false
+            withAnimation(.snappy) {
+                stepIndex = min(max(request.step, 0), max(directions.count - 1, 0))
+                checkedRows = []
+            }
+        }
         .onDisappear {
+            if store.cookingRecipeID == recipe.id { store.cookingRecipeID = nil }
             #if os(iOS)
             UIApplication.shared.isIdleTimerDisabled = false
             #endif
@@ -310,15 +324,19 @@ struct CookModeView: View {
 
             if let timer = timerStore.timer(for: recipe.id, step: stepIndex, label: duration.label) {
                 let remaining = timer.isPaused ? "Paused \(timer.remainingText(at: now))" : timer.remainingText(at: now)
-                var digits = AttributedString("\u{2009}\(remaining)\u{2009}\u{2009}")
+                // No-break spaces pad the capsule and keep icon, countdown and
+                // cooking time together on one line
+                var digits = AttributedString("\u{00A0}\(remaining)\u{00A0}\u{00A0}")
                 digits.link = link
                 digits.foregroundColor = .white
                 if !roundedPills { digits.backgroundColor = Self.timerTint }
-                let pill = Text("\u{2009}\u{2009}\(Image(systemName: "timer"))\(digits)")
+                var lead = AttributedString("\u{00A0}\u{00A0}")
+                lead.link = link
+                let pill = Text("\(Text(lead))\(Image(systemName: "timer"))\(Text(digits))")
                     .font(.system(size: size * 0.68, weight: .bold).monospacedDigit())
                     .foregroundColor(.white)
                     .baselineOffset(size * 0.1)
-                result = Text("\(result) \(pillMarked(pill, roundedPills: roundedPills))")
+                result = Text("\(result)\u{00A0}\(pillMarked(pill, roundedPills: roundedPills))")
             } else {
                 let icon = Text(Image(systemName: "timer"))
                     .font(.system(size: size * 0.8, weight: .semibold))
@@ -344,7 +362,8 @@ struct CookModeView: View {
               durations.indices.contains(index) else { return .systemAction }
         let duration = durations[index]
         if let timer = timerStore.timer(for: recipe.id, step: stepIndex, label: duration.label) {
-            timerToStop = timer
+            // A finished timer just clears; a running one asks first
+            if timer.isDone(at: Date()) { timerStore.stop(timer) } else { timerToStop = timer }
         } else {
             timerStore.start(recipe: recipe, step: stepIndex, duration: duration)
             hasStartedTimer = true

@@ -4,6 +4,9 @@ import EventKit
 struct RecipeDetailView: View {
     @EnvironmentObject var store: RecipeStore
     @State var recipe: Recipe
+    /// Open cook mode at this step on appear (from a timer's link).
+    var cookAtStep: Int? = nil
+    @State private var cookStartStep: Int?
     @State private var showingEditSheet = false
     @State private var showingDeleteConfirmation = false
     @State private var ingredientToAddToReminders: Ingredient?
@@ -445,6 +448,9 @@ struct RecipeDetailView: View {
             store.markViewed(recipe)
             CookPlanProvider.shared.prepare(recipe)
             isVisible = true
+            if let step = cookAtStep, cookStartStep == nil, !isCooking {
+                startCooking(byRotation: false, atStep: step)
+            }
         }
         .onDisappear { isVisible = false }
         #if os(iOS)
@@ -540,7 +546,7 @@ struct RecipeDetailView: View {
     }
     
     private var cookMode: some View {
-        CookModeView(recipe: $recipe, accentColor: accentColor, enteredByRotation: cookingEnteredByRotation)
+        CookModeView(recipe: $recipe, accentColor: accentColor, enteredByRotation: cookingEnteredByRotation, startStep: cookStartStep)
             .environmentObject(store)
     }
 
@@ -551,8 +557,9 @@ struct RecipeDetailView: View {
         return "Start Cooking"
     }
 
-    private func startCooking(byRotation: Bool) {
+    private func startCooking(byRotation: Bool, atStep step: Int? = nil) {
         CookPlanProvider.shared.prepare(recipe)
+        cookStartStep = step
         cookingEnteredByRotation = byRotation
         isCooking = true
     }

@@ -187,7 +187,7 @@ final class CookTimerStore: ObservableObject {
         )
         let attributes = AlarmAttributes<CookTimerMetadata>(
             presentation: presentation,
-            metadata: CookTimerMetadata(recipeTitle: timer.recipeTitle, stepNumber: timer.step + 1, label: timer.label),
+            metadata: CookTimerMetadata(recipeTitle: timer.recipeTitle, recipeID: timer.recipeID, stepNumber: timer.step + 1, label: timer.label),
             tintColor: .orange
         )
         let configuration = AlarmManager.AlarmConfiguration<CookTimerMetadata>(
@@ -330,6 +330,9 @@ final class CookTimerStore: ObservableObject {
             content.title = "Timer done"
             content.body = "\(timer.recipeTitle) · Step \(timer.step + 1) · \(timer.label)"
             content.sound = .default
+            if let url = CookStepRequest.url(recipeID: timer.recipeID, stepNumber: timer.step + 1) {
+                content.userInfo = ["url": url.absoluteString]
+            }
             let request = UNNotificationRequest(
                 identifier: timer.id.uuidString,
                 content: content,
@@ -348,5 +351,21 @@ private final class ForegroundAlertPresenter: NSObject, UNUserNotificationCenter
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         [.banner, .list, .sound]
+    }
+
+    /// Tapping a timer's notification opens cook mode at its step.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard let link = response.notification.request.content.userInfo["url"] as? String,
+              let url = URL(string: link) else { return }
+        await MainActor.run {
+            #if os(iOS)
+            UIApplication.shared.open(url)
+            #elseif os(macOS)
+            NSWorkspace.shared.open(url)
+            #endif
+        }
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct RecipeListView: View {
+    @State private var cookLink: CookLinkTarget?
     @EnvironmentObject var store: RecipeStore
     @State private var searchText = ""
     @State private var showingAddRecipe = false
@@ -104,6 +105,17 @@ struct RecipeListView: View {
             return category.color
         }
         return .accentColor
+    }
+
+    // MARK: - Links into cook mode
+
+    /// Opens the recipe and cook mode at the step a timer's link asks for.
+    /// Cook mode handles links for the recipe it's already showing.
+    private func openPendingCookLink() {
+        guard let request = store.pendingCookStep, store.cookingRecipeID != request.recipeID,
+              let recipe = store.recipes.first(where: { $0.id == request.recipeID }) else { return }
+        store.pendingCookStep = nil
+        cookLink = CookLinkTarget(recipe: recipe, step: request.step)
     }
 
     // MARK: - Just Viewed
@@ -382,6 +394,9 @@ struct RecipeListView: View {
         NavigationStack {
             if store.isICloudAvailable || store.useLocalStorage {
                 mainContent
+                    .navigationDestination(item: $cookLink) { target in
+                        RecipeDetailView(recipe: target.recipe, cookAtStep: target.step)
+                    }
                     .toolbar {
                         toolbarContent
                     }
@@ -403,6 +418,9 @@ struct RecipeListView: View {
                     store.pendingImportURL = nil
                 }
         }
+        .onChange(of: store.pendingCookStep) { _, _ in openPendingCookLink() }
+        // A link that launched the app arrives before the recipes have loaded
+        .onChange(of: store.recipes.count) { _, _ in openPendingCookLink() }
         .onChange(of: store.pendingImportURL) { _, newValue in
             if newValue != nil {
                 showingURLImport = true
@@ -1233,4 +1251,16 @@ struct CookbookTitleView: View {
 #Preview {
     RecipeListView()
         .environmentObject(RecipeStore())
+}
+
+/// A recipe page to open with cook mode at a step, from a timer's link.
+struct CookLinkTarget: Hashable {
+    let recipe: Recipe
+    let step: Int
+
+    static func == (a: Self, b: Self) -> Bool { a.recipe.id == b.recipe.id && a.step == b.step }
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(recipe.id)
+        hasher.combine(step)
+    }
 }

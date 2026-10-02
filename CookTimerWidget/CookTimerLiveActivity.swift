@@ -17,6 +17,7 @@ struct CookTimerLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: AlarmAttributes<CookTimerMetadata>.self) { context in
             LockScreenTimerView(context: context)
+                .widgetURL(context.attributes.metadata?.url)
                 .activityBackgroundTint(Color.black.opacity(0.6))
                 .activitySystemActionForegroundColor(.orange)
         } dynamicIsland: { context in
@@ -52,6 +53,7 @@ struct CookTimerLiveActivity: Widget {
                 Image(systemName: "timer")
                     .foregroundStyle(.orange)
             }
+            .widgetURL(context.attributes.metadata?.url)
             .keylineTint(.orange)
         }
     }
