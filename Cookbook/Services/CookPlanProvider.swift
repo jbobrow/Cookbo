@@ -14,7 +14,6 @@ final class CookPlanProvider: ObservableObject {
     @Published private(set) var plans: [UUID: CookPlan] = [:]
     /// Recipes whose overview the on-device model is still working out, so
     /// cook mode can wait rather than show it changing.
-    @Published private(set) var overviewPending: Set<UUID> = []
     private var keys: [UUID: String] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
@@ -35,7 +34,6 @@ final class CookPlanProvider: ObservableObject {
         if keys[recipe.id] == key, plans[recipe.id] != nil { return }
 
         tasks[recipe.id]?.cancel()
-        overviewPending.remove(recipe.id)
         keys[recipe.id] = key
 
         if let cached = loadCached(recipe.id, key: key) {
@@ -69,16 +67,9 @@ final class CookPlanProvider: ObservableObject {
         let stepTexts = recipe.orderedDirections.map { $0.text.sanitizedForDisplay }
         let ingredientTexts = recipe.allIngredients.map(\.text)
 
-        overviewPending.insert(id)
         tasks[id] = Task { [weak self] in
             var plan = base
-            // The overview first: it's what cook mode opens on, and one call
-            if let hints = await OnDeviceCookPlanner.suggestOverview(for: recipe), hints.count == plan.steps.count {
-                plan.overviewHints = hints
-            }
-            guard let self, self.keys[id] == key, !Task.isCancelled else { return }
-            self.plans[id] = plan
-            self.overviewPending.remove(id)
+            guard let self else { return }
 
             var firstUse: [Int: Int] = [:]
             for index in plan.steps.indices {

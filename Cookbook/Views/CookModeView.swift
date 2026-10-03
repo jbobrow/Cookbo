@@ -54,7 +54,7 @@ struct CookModeView: View {
     }
 
     private var overview: CookOverview {
-        CookIntroPlanner.overview(for: recipe, plan: plan, hints: plan.overviewHints)
+        CookIntroPlanner.overview(for: recipe, plan: plan)
     }
 
     private var prepTasks: [PrepTask] {
@@ -94,7 +94,6 @@ struct CookModeView: View {
                     CookIntroView(
                         page: page,
                         overview: overview,
-                        overviewLoading: plans.overviewPending.contains(recipe.id),
                         prepTasks: prepTasks,
                         prepped: $prepped,
                         measureTasks: measureTasks,

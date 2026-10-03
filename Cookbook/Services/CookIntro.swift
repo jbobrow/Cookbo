@@ -90,24 +90,15 @@ nonisolated enum CookStage: String, CaseIterable, Codable {
     var isHeadStart: Bool { self == .preheat || self == .boil || self == .melt }
 }
 
-/// What the on-device model suggested for one step of the overview, checked
-/// before use.
-nonisolated struct OverviewHint: Codable, Equatable {
-    /// One of the stage names
-    var word: String
-    /// Its estimate when the step gives no time; 0 when it doesn't know
-    var minutes: Int
-    /// 1-based step this one happens alongside; 0 when it doesn't
-    var alongsideStep: Int
-}
-
 // MARK: - Planner
 
 nonisolated enum CookIntroPlanner {
 
     // MARK: Overview
 
-    static func overview(for recipe: Recipe, plan: CookPlan, hints: [OverviewHint]? = nil) -> CookOverview {
+    /// Worked out from the recipe's own words, so it's ready at once and the
+    /// same on every device.
+    static func overview(for recipe: Recipe, plan: CookPlan) -> CookOverview {
         let texts = recipe.orderedDirections.map { $0.text.sanitizedForDisplay }
         let declaredPrep = recipe.prepDuration > 0 ? recipe.prepDuration / 60 : 0
 
@@ -125,7 +116,6 @@ nonisolated enum CookIntroPlanner {
         var waterComing = false
 
         for (index, fullText) in texts.enumerated() where !isNote(fullText) {
-            let hint = hints.flatMap { $0.indices.contains(index) ? $0[index] : nil }
             let alongside = runsAlongside(fullText)
 
             // The oven and the pasta water go on early, so they heat while you
@@ -149,17 +139,9 @@ nonisolated enum CookIntroPlanner {
             text = withoutLeadIns(text)
             if text.split(whereSeparator: \.isWhitespace).count < 4 { continue }
 
-            // The step's own words decide; the model only names steps they
-            // don't, and a step that names nothing goes with the one before
-            let suggested = hint.flatMap { CookStage(rawValue: $0.word) }.flatMap { $0.isHeadStart ? nil : $0 }
-            let stage = stage(for: text) ?? suggested ?? steps.last(where: { !$0.alongside })?.stage ?? .prep
-
-            var timing = stepTiming(text, stage: stage)
-            // The model only estimates steps that give no time at all
-            if timing.estimated, CookPlanner.durations(in: text).isEmpty,
-               let minutes = hint?.minutes, (1...240).contains(minutes) {
-                timing = (Double(minutes), Double(minutes), "~\(minutes) min", true)
-            }
+            // A step that names nothing goes with the one before
+            let stage = stage(for: text) ?? steps.last(where: { !$0.alongside })?.stage ?? .prep
+            let timing = stepTiming(text, stage: stage)
             var step = Step(index: index, stage: stage, timing: timing, alongside: alongside,
                             servesHere: matches(.serve, in: text))
             if waterComing, !alongside, stage != .prep {
@@ -191,24 +173,13 @@ nonisolated enum CookIntroPlanner {
         var blocks: [CookOverview.Block] = []
         var clock = 0.0
         var lastMain: CookOverview.Block?
-        var mainBlockForStep: [Int: CookOverview.Block] = [:]
         var neededAt: [CookStage: Double] = [:]
         for step in steps {
-            let hint = hints.flatMap { $0.indices.contains(step.index) ? $0[step.index] : nil }
             let word = step.stage.rawValue
 
             // Side by side only when the step says so ("Meanwhile…", "While
-            // the shallots cook…"); the model can say which step it's beside
-            var anchor: CookOverview.Block?
-            if step.alongside {
-                if let hint, hint.alongsideStep >= 1, hint.alongsideStep - 1 < step.index,
-                   let named = mainBlockForStep[hint.alongsideStep - 1] {
-                    anchor = named
-                } else {
-                    anchor = lastMain
-                }
-            }
-            if let anchor {
+            // the shallots cook…"), beside the step before it
+            if step.alongside, let anchor = lastMain {
                 blocks.append(.init(word: word, step: step.index, lane: 1, start: anchor.start,
                                     end: anchor.start + step.length, timeLabel: step.timing.label, kind: .alongside))
                 continue
@@ -227,7 +198,6 @@ nonisolated enum CookIntroPlanner {
             let block = CookOverview.Block(word: word, step: step.index, lane: 0, start: start, end: start + step.length,
                                            timeLabel: step.timing.label, kind: step.stage == .prep ? .prep : .cook)
             blocks.append(block)
-            mainBlockForStep[step.index] = block
             lastMain = block
             clock = block.end
         }

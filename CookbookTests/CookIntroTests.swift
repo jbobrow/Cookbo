@@ -150,23 +150,14 @@ final class CookIntroTests: XCTestCase {
     }
 
     func testOverview_stepsInOrderStayInOneLane() {
-        // The model put most of these side by side; none of them says so
-        let hints = (1...4).map { OverviewHint(word: "Simmer", minutes: 0, alongsideStep: $0 > 1 ? $0 - 1 : 0) }
-        let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup), hints: hints)
+        // None of these says "meanwhile", so they run one after another
+        let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup))
         let steps = overview.blocks.filter { $0.step != nil && CookStage(rawValue: $0.word)?.isHeadStart != true }
         XCTAssertTrue(steps.allSatisfy { $0.lane == 0 })
     }
 
-    func testOverview_modelEstimatesDontReplaceTheRecipesTimes() {
-        let hints = [OverviewHint(word: "Roast", minutes: 12, alongsideStep: 0), OverviewHint(word: "Assemble", minutes: 4, alongsideStep: 0)]
-        let overview = CookIntroPlanner.overview(for: salad, plan: CookPlanner.heuristicPlan(for: salad), hints: hints)
-        XCTAssertEqual(overview.blocks.first { $0.step == 0 && $0.kind == .cook }?.timeLabel, "~17 min")
-        XCTAssertEqual(overview.blocks.first { $0.step == 1 }?.timeLabel, "~4 min", "a step with no time takes the estimate")
-    }
-
-    func testOverview_theStepsOwnWordsBeatTheModel() {
-        let hints = ["Serve", "Bake", "Bake", "Bake"].map { OverviewHint(word: $0, minutes: 0, alongsideStep: 0) }
-        let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup), hints: hints)
+    func testOverview_stagesComeFromTheStepsOwnWords() {
+        let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup))
         XCTAssertEqual(overview.blocks.filter { $0.lane == 0 }.map(\.word), ["Prep", "Simmer"],
                        "the cutting in step 1 is prep, and the rest simmers in the pot")
     }
@@ -180,14 +171,6 @@ final class CookIntroTests: XCTestCase {
         XCTAssertEqual(boil?.end ?? 0, simmer?.start ?? -1, accuracy: 0.001)
         XCTAssertGreaterThanOrEqual(simmer?.start ?? 0, 5, "10 minutes for the water, 5 of them during prep")
     }
-
-    func testOverview_modelCantNameAStepPrep() {
-        let hints = [OverviewHint(word: "Prep", minutes: 0, alongsideStep: 0)] + (2...4).map { _ in OverviewHint(word: "", minutes: 0, alongsideStep: 0) }
-        let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup), hints: hints)
-        XCTAssertEqual(overview.blocks.filter { $0.word == "Prep" }.count, 1)
-    }
-
-    // MARK: - Prep
 
     func testPrep_cutsWrittenInTheSteps() {
         let tasks = CookIntroPlanner.prepTasks(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup))
@@ -283,29 +266,13 @@ final class CookIntroTests: XCTestCase {
         XCTAssertEqual(drain.start, caramelize.start)
     }
 
-    func testOverview_theModelOnlyNamesStepsTheTextDoesnt() {
+    func testOverview_aStepThatNamesNothingGoesWithTheOneBefore() {
         let recipe = Recipe(directions: [
             Direction(text: "Heat the oil in a pan and cook the onions for 5 minutes.", order: 1),
             Direction(text: "Pour everything into the dish and let it go.", order: 2)
         ])
-        let hints = [
-            OverviewHint(word: "Serve", minutes: 0, alongsideStep: 0),
-            OverviewHint(word: "Bake", minutes: 25, alongsideStep: 0)
-        ]
-        let overview = CookIntroPlanner.overview(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe), hints: hints)
-        XCTAssertEqual(overview.blocks.first { $0.step == 0 }?.word, "Cook", "the step says cook")
-        XCTAssertEqual(overview.blocks.first { $0.step == 1 }?.word, "Bake", "this one names nothing")
-        XCTAssertEqual(overview.blocks.first { $0.step == 1 }?.timeLabel, "~25 min")
-    }
-
-    func testOverview_theModelCantUseWordsOutsideTheStages() {
-        let recipe = Recipe(directions: [
-            Direction(text: "Heat the oil in a pan and cook the onions for 5 minutes.", order: 1),
-            Direction(text: "Pour everything into the dish and let it go.", order: 2)
-        ])
-        let hints = [OverviewHint(word: "", minutes: 0, alongsideStep: 0), OverviewHint(word: "Pour", minutes: 0, alongsideStep: 0)]
-        let overview = CookIntroPlanner.overview(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe), hints: hints)
-        XCTAssertEqual(overview.blocks.filter { $0.lane == 0 }.map(\.word), ["Cook"], "a step that names nothing goes with the one before")
+        let overview = CookIntroPlanner.overview(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe))
+        XCTAssertEqual(overview.blocks.filter { $0.lane == 0 }.map(\.word), ["Cook"])
     }
 
     func testStages() {

@@ -20,7 +20,6 @@ nonisolated struct CookPlan: Codable, Equatable {
     var steps: [CookStep]
     /// The on-device model's one-word names, estimates and overlaps for the
     /// overview, one per step; nil until it has run.
-    var overviewHints: [OverviewHint]? = nil
 
     /// The step where an ingredient (an index into `Recipe.allIngredients`)
     /// first goes in. Next checks it off there.
