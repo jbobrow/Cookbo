@@ -124,9 +124,11 @@ struct CookIntroView: View {
                     .accessibilityHint(measuresShown ? "Hides them" : "Shows them")
                     .id(Self.measureHeading)
                 }
+                // A fade in place: sliding down from the heading drew it over
+                // the cut cards above
                 if showingMeasures {
                     measureList
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .transition(.opacity)
                 }
             }
             .padding(.top, prepTasks.isEmpty ? 0 : 6)
