@@ -559,7 +559,11 @@ struct RecipeDetailView: View {
         CookPlanProvider.shared.prepare(recipe)
         cookStartStep = step
         cookingEnteredByRotation = byRotation
-        isCooking = true
+        // Turning the phone opens cook mode at once rather than sliding it up
+        // while the screen is still upright; it then turns sideways
+        var transaction = Transaction()
+        transaction.disablesAnimations = byRotation
+        withTransaction(transaction) { isCooking = true }
     }
 
     private func toggleThisWeek() {

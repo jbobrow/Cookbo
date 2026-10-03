@@ -39,6 +39,16 @@ struct CookModeView: View {
     @State private var prepped: Set<Int> = []
     /// Measured ingredients checked off, by position in the measure list.
     @State private var measured: Set<Int> = []
+    /// Whether the cook is on screen. Turning the phone sideways opens cook
+    /// mode empty, so the screen turns with nothing on it and the cook fades
+    /// in sideways; closing sideways fades it out before turning back.
+    @State private var contentShown: Bool
+    /// The screen is wider than it is tall.
+    @State private var screenIsLandscape = false
+    /// Waiting for the screen to turn upright before going away.
+    @State private var closingUpright = false
+    /// Gave back the permission to turn sideways.
+    @State private var releasedOrientation = false
 
     init(recipe: Binding<Recipe>, accentColor: Color, enteredByRotation: Bool, startStep: Int? = nil) {
         _recipe = recipe
@@ -51,19 +61,22 @@ struct CookModeView: View {
         // link goes straight to the step
         let fresh = startStep == nil && steps > 0 && !recipe.wrappedValue.directions.contains(where: \.isCompleted)
         _introPage = State(initialValue: fresh ? .overview : nil)
+        #if os(iOS)
+        _contentShown = State(initialValue: !(enteredByRotation && UIDevice.current.userInterfaceIdiom == .phone))
+        #else
+        _contentShown = State(initialValue: true)
+        #endif
     }
 
-    private var overview: CookOverview {
-        CookIntroPlanner.overview(for: recipe, plan: plan, hints: plan.overviewHints)
-    }
+    @State private var introCache = IntroCache()
 
-    private var prepTasks: [PrepTask] {
-        CookIntroPlanner.prepTasks(for: recipe, plan: plan)
-    }
-
-    private var measureTasks: [MeasureTask] {
-        CookIntroPlanner.measureTasks(for: recipe, plan: plan)
-    }
+    /// The overview, prep and measure lists, worked out once for this recipe
+    /// and plan rather than on every redraw (turning the screen redraws
+    /// several times).
+    private var intro: IntroCache.Content { introCache.content(for: recipe, plan: plan) }
+    private var overview: CookOverview { intro.overview }
+    private var prepTasks: [PrepTask] { intro.prepTasks }
+    private var measureTasks: [MeasureTask] { intro.measureTasks }
 
     /// The prep screen shows when there's anything to cut or measure.
     private var hasPrepPage: Bool { !prepTasks.isEmpty || !measureTasks.isEmpty }
@@ -94,7 +107,6 @@ struct CookModeView: View {
                     CookIntroView(
                         page: page,
                         overview: overview,
-                        overviewLoading: plans.overviewPending.contains(recipe.id),
                         prepTasks: prepTasks,
                         prepped: $prepped,
                         measureTasks: measureTasks,
@@ -123,8 +135,13 @@ struct CookModeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
             .simultaneousGesture(swipe)
+            .opacity(contentShown ? 1 : 0)
         }
         .background(.background)
+        .onGeometryChange(for: Bool.self, of: { $0.size.width > $0.size.height }) { landscape in
+            screenIsLandscape = landscape
+            screenTurned(toLandscape: landscape)
+        }
         #if os(macOS)
         .frame(minWidth: 780, minHeight: 480)
         #endif
@@ -135,6 +152,12 @@ struct CookModeView: View {
             #if os(iOS)
             UIApplication.shared.isIdleTimerDisabled = true
             OrientationLock.cookModeOpened()
+            // If the screen doesn't turn (the phone went flat), show it anyway
+            if !contentShown {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    if !contentShown, !closingUpright { withAnimation(.easeOut(duration: 0.25)) { contentShown = true } }
+                }
+            }
             #endif
         }
         .onChange(of: store.pendingCookStep) { _, request in
@@ -147,12 +170,21 @@ struct CookModeView: View {
             if store.cookingRecipeID == recipe.id { store.cookingRecipeID = nil }
             #if os(iOS)
             UIApplication.shared.isIdleTimerDisabled = false
-            OrientationLock.cookModeClosed()
+            releaseOrientation()
             #endif
         }
         #if os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            // Opened by turning the phone, turning it back closes it. The
+            // phone says so before the screen turns, so the cook can fade out
+            // first and the screen turns with nothing on it.
+            guard enteredByRotation, UIDevice.current.userInterfaceIdiom == .phone,
+                  UIDevice.current.orientation == .portrait, screenIsLandscape else { return }
+            close()
+        }
         .onChange(of: verticalSizeClass) { _, sizeClass in
-            if enteredByRotation, sizeClass == .regular { dismiss() }
+            // Turned back upright without the phone saying so first
+            if enteredByRotation, sizeClass == .regular, !closingUpright { close() }
         }
         #endif
     }
@@ -161,7 +193,7 @@ struct CookModeView: View {
 
     private var topBar: some View {
         HStack(spacing: 12) {
-            Button { dismiss() } label: {
+            Button { close() } label: {
                 Image(systemName: "xmark")
                     .font(.body.weight(.semibold))
                     .frame(width: 44, height: 44)
@@ -736,7 +768,7 @@ struct CookModeView: View {
                     .buttonStyle(.plain)
                     .keyboardShortcut(.defaultAction)
 
-                    Button { dismiss() } label: {
+                    Button { close() } label: {
                         Text("Not Now")
                             .font(.body.weight(.semibold))
                             .padding(.horizontal, 22)
@@ -778,7 +810,52 @@ struct CookModeView: View {
     private func markCooked() {
         recipe = store.markCooked(recipe)
         withAnimation(.spring(duration: 0.4)) { isCooked = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { dismiss() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { close() }
+    }
+
+    // MARK: - Opening and closing
+
+    /// Leaves cook mode. Sideways on an iPhone it fades out and turns the
+    /// screen upright first, so the recipe page underneath is only ever seen
+    /// upright; otherwise it slides away as usual.
+    private func close() {
+        #if os(iOS)
+        if UIDevice.current.userInterfaceIdiom == .phone, screenIsLandscape {
+            guard !closingUpright else { return }
+            closingUpright = true
+            withAnimation(.easeIn(duration: 0.15)) { contentShown = false }
+            releaseOrientation()
+            // In case the screen never reports turning
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { dismissWithoutSliding() }
+            return
+        }
+        #endif
+        dismiss()
+    }
+
+    /// The screen finished turning.
+    private func screenTurned(toLandscape landscape: Bool) {
+        if landscape, !contentShown, !closingUpright {
+            withAnimation(.easeOut(duration: 0.25)) { contentShown = true }
+        } else if !landscape, closingUpright {
+            dismissWithoutSliding()
+        }
+    }
+
+    private func dismissWithoutSliding() {
+        guard closingUpright else { return }
+        closingUpright = false
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { dismiss() }
+    }
+
+    private func releaseOrientation() {
+        #if os(iOS)
+        guard !releasedOrientation else { return }
+        releasedOrientation = true
+        OrientationLock.cookModeClosed()
+        #endif
     }
 }
 
@@ -810,5 +887,35 @@ struct TimerPillRenderer: TextRenderer {
                 context.draw(run)
             }
         }
+    }
+}
+
+/// Holds the screens before step 1 between redraws. Checking things off
+/// changes the recipe but not what these are made from, so they're kept
+/// until the steps, ingredients, prep time or plan change.
+private final class IntroCache {
+    struct Content {
+        let overview: CookOverview
+        let prepTasks: [PrepTask]
+        let measureTasks: [MeasureTask]
+    }
+
+    private var key: [String] = []
+    private var plan: CookPlan?
+    private var cached: Content?
+
+    func content(for recipe: Recipe, plan: CookPlan) -> Content {
+        let key = recipe.orderedDirections.map(\.text) + ["--"] + recipe.allIngredients.map(\.text)
+            + ["\(recipe.prepDuration)"]
+        if let cached, key == self.key, plan == self.plan { return cached }
+        let content = Content(
+            overview: CookIntroPlanner.overview(for: recipe, plan: plan),
+            prepTasks: CookIntroPlanner.prepTasks(for: recipe, plan: plan),
+            measureTasks: CookIntroPlanner.measureTasks(for: recipe, plan: plan)
+        )
+        self.key = key
+        self.plan = plan
+        cached = content
+        return content
     }
 }

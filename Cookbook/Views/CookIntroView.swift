@@ -10,8 +10,6 @@ struct CookIntroView: View {
 
     let page: Page
     let overview: CookOverview
-    /// The on-device model is still working out the overview.
-    var overviewLoading = false
     let prepTasks: [PrepTask]
     @Binding var prepped: Set<Int>
     let measureTasks: [MeasureTask]
@@ -29,7 +27,7 @@ struct CookIntroView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(page == .overview ? (overviewLoading ? " " : overview.totalLabel) : (prepTasks.isEmpty ? "Measure these first" : "Cut these first"))
+            Text(page == .overview ? overview.totalLabel : (prepTasks.isEmpty ? "Measure these first" : "Cut these first"))
                 .font(.system(size: isLandscape ? 26 : 30, weight: .bold))
                 .padding(.top, 8)
                 .accessibilityAddTraits(.isHeader)
@@ -37,21 +35,7 @@ struct CookIntroView: View {
             Group {
                 switch page {
                 case .overview:
-                    if overviewLoading {
-                        // Wait for the finished overview rather than show it changing
-                        VStack(spacing: 12) {
-                            ProgressView()
-                                .controlSize(.large)
-                            Text("Planning your cook…")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .transition(.opacity)
-                    } else {
-                        CookOverviewTimeline(overview: overview, accentColor: accentColor, isLandscape: isLandscape)
-                            .transition(.opacity)
-                    }
+                    CookOverviewTimeline(overview: overview, accentColor: accentColor, isLandscape: isLandscape)
                 case .prep: prepList
                 }
             }
