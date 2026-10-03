@@ -99,6 +99,10 @@ footer a { font-weight: 400; color: var(--muted); text-decoration: none; }
 footer a:hover { color: var(--ink); }
 footer a[aria-current="page"] { color: var(--ink); }
 footer p { margin: 4px 0 0; }
+/* "App by Jon Bobrow", the same signature as in the app */
+.by-jon { display: inline-block; margin-top: 14px; transition: color 0.15s; }
+.by-jon:hover { color: var(--ink); }
+.by-jon svg { display: block; width: 150px; height: auto; }
 
 /* ─── Compatible sites ─── */
 
