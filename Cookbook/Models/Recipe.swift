@@ -27,7 +27,7 @@ struct Recipe: Identifiable, Codable {
     var dateLastViewed: Date?   // Drives the "Just viewed" row
     var isInThisWeek: Bool      // Membership in the This Week plan
 
-    var allIngredients: [Ingredient] {
+    nonisolated var allIngredients: [Ingredient] {
         ingredientSections.flatMap { $0.ingredients }
     }
 
@@ -185,7 +185,7 @@ struct Direction: Identifiable, Codable {
 
 extension String {
     /// Replaces non-breaking spaces with regular spaces so SwiftUI Text can wrap.
-    var sanitizedForDisplay: String {
+    nonisolated var sanitizedForDisplay: String {
         replacingOccurrences(of: "\u{00A0}", with: " ")
     }
 }

@@ -43,7 +43,7 @@ nonisolated enum CookTimerStops {
 }
 
 @available(iOS 26.0, *)
-nonisolated struct PauseCookTimerIntent: LiveActivityIntent {
+struct PauseCookTimerIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "Pause Timer"
     static let isDiscoverable = false
 
@@ -60,7 +60,7 @@ nonisolated struct PauseCookTimerIntent: LiveActivityIntent {
 }
 
 @available(iOS 26.0, *)
-nonisolated struct ResumeCookTimerIntent: LiveActivityIntent {
+struct ResumeCookTimerIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "Resume Timer"
     static let isDiscoverable = false
 
@@ -77,7 +77,7 @@ nonisolated struct ResumeCookTimerIntent: LiveActivityIntent {
 }
 
 @available(iOS 26.0, *)
-nonisolated struct StopCookTimerIntent: LiveActivityIntent {
+struct StopCookTimerIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "Stop Timer"
     static let isDiscoverable = false
 

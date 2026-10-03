@@ -364,7 +364,7 @@ private final class ForegroundAlertPresenter: NSObject, UNUserNotificationCenter
             #if os(iOS)
             UIApplication.shared.open(url)
             #elseif os(macOS)
-            NSWorkspace.shared.open(url)
+            _ = NSWorkspace.shared.open(url)
             #endif
         }
     }

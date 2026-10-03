@@ -103,13 +103,13 @@ final class CookbookFoldersTests: XCTestCase {
 
     func testConsolidate_followsARenamedCookbook() throws {
         try makeFolder("my-cookbook-3f2504", for: Cookbook(id: id, name: "Family Recipes"))
-        folders.consolidate()
+        _ = folders.consolidate()
         XCTAssertEqual(try folderNames(), ["family-recipes-3f2504"])
     }
 
     func testConsolidate_leavesCorrectlyNamedFoldersAlone() throws {
         try makeFolder("family-recipes-3f2504", for: Cookbook(id: id, name: "Family Recipes"), recipes: ["a-111111.md": "a"])
-        folders.consolidate()
+        _ = folders.consolidate()
         XCTAssertEqual(try folderNames(), ["family-recipes-3f2504"])
         XCTAssertEqual(try recipeFiles(in: "family-recipes-3f2504"), ["a-111111.md"])
     }
@@ -168,7 +168,7 @@ final class CookbookFoldersTests: XCTestCase {
         let keeper = try makeFolder("family-recipes-3f2504", for: cookbook, categories: [shared])
         try makeFolder(id.uuidString, for: cookbook, categories: [renamed])
 
-        folders.consolidate()
+        _ = folders.consolidate()
 
         let categories = try JSONDecoder().decode(
             [Category].self,
@@ -184,7 +184,7 @@ final class CookbookFoldersTests: XCTestCase {
         // How iCloud represents a file that hasn't downloaded yet
         try "".write(to: duplicate.appendingPathComponent("Recipes/.pending.md.icloud"), atomically: true, encoding: .utf8)
 
-        folders.consolidate()
+        _ = folders.consolidate()
 
         XCTAssertEqual(try recipeFiles(in: "family-recipes-3f2504"), ["ready.md"], "downloaded files still move over")
         XCTAssertTrue(fm.fileExists(atPath: duplicate.appendingPathComponent("Recipes/.pending.md.icloud").path))
@@ -199,7 +199,7 @@ final class CookbookFoldersTests: XCTestCase {
         try makeFolder("old-name-3f2504", for: cookbook, recipes: ["a.md": "a", "b.md": "b", "c.md": "c"])
         try makeFolder(id.uuidString, for: cookbook, recipes: ["d.md": "d"])
 
-        folders.consolidate()
+        _ = folders.consolidate()
 
         XCTAssertEqual(try folderNames(), ["family-recipes-3f2504"])
         XCTAssertEqual(try recipeFiles(in: "family-recipes-3f2504"), ["a.md", "b.md", "c.md", "d.md"])
