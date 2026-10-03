@@ -75,14 +75,52 @@ final class CookPlanTests: XCTestCase {
         XCTAssertTrue(CookPlanner.parseIngredient("1 tablespoon vanilla extract").terms.contains("vanilla"))
     }
 
-    func testHeuristicPlan_vanillaExtractIsVanillaInTheSteps() {
-        let clafoutis = Recipe(
-            ingredients: ["1 and 1/4 cups whole or 2 percent milk", "2/3 cup granulated sugar, divided", "3 eggs",
-                          "1 tablespoon vanilla extract", "1/8 teaspoon salt", "1 cup flour"].map { Ingredient(text: $0) },
-            directions: [Direction(text: "Place the milk, 1/3 cup granulated sugar, eggs, vanilla, salt and flour in a blender. Blend at top speed until smooth and frothy, about 1 minute.", order: 1)]
-        )
+    private let clafoutis = Recipe(
+        ingredients: ["Butter for pan", "1 and 1/4 cups whole or 2 percent milk", "2/3 cup granulated sugar, divided", "3 eggs",
+                      "1 tablespoon vanilla extract", "1/8 teaspoon salt", "1 cup flour",
+                      "1 pint (2 generous cups) blackberries or blueberries, rinsed and well drained",
+                      "Powdered sugar in a shaker"].map { Ingredient(text: $0) },
+        directions: [
+            Direction(text: "Place the milk, 1/3 cup granulated sugar, eggs, vanilla, salt and flour in a blender. Blend at top speed until smooth and frothy, about 1 minute.", order: 1),
+            Direction(text: "Spread berries over the batter and sprinkle on the remaining 1/3 cup granulated sugar. Pour on the rest of the batter and smooth with the back of a spoon.", order: 2)
+        ]
+    )
+
+    func testHeuristicPlan_clafoutisListsEverythingThatGoesIn() {
         let plan = CookPlanner.heuristicPlan(for: clafoutis)
-        XCTAssertTrue(plan.steps[0].items.contains { $0.ingredientIndex == 3 }, "vanilla goes in with the rest")
+        XCTAssertEqual(names(plan.steps[0]), ["1¼ cups whole or 2 percent milk", "⅓ cup granulated sugar", "3 eggs",
+                                              "1 tbsp vanilla extract", "⅛ tsp salt", "1 cup flour"],
+                       "vanilla is the vanilla extract, and \"1 and 1/4\" is 1¼")
+        XCTAssertTrue(plan.steps[1].items.contains { $0.ingredientIndex == 7 }, "the berries are the blackberries or blueberries")
+    }
+
+    func testHighlightIsJustTheIngredient() {
+        let plan = CookPlanner.heuristicPlan(for: clafoutis)
+        let text = clafoutis.directions[0].text
+        let highlighted = CookPlanner.highlightRanges(in: text, terms: plan.steps[0].items.flatMap(\.highlightTerms)).map { String(text[$0]) }
+        XCTAssertTrue(highlighted.contains("granulated sugar"))
+        XCTAssertFalse(highlighted.contains("cup"), "the milk's \"cups\" isn't a name")
+        XCTAssertTrue(highlighted.contains("vanilla"))
+    }
+
+    func testOrSharesTheNoun() {
+        let terms = CookPlanner.parseIngredient("4 cups chicken or vegetable broth").terms
+        XCTAssertTrue(terms.contains("chicken broth"))
+        XCTAssertFalse(terms.contains("chicken"), "chicken here is a kind of broth")
+        XCTAssertTrue(CookPlanner.parseIngredient("salt and black pepper").terms.contains("salt"))
+        XCTAssertFalse(CookPlanner.parseIngredient("1 cup almond milk").terms.contains("nuts"))
+        XCTAssertTrue(CookPlanner.parseIngredient("1/2 cup chopped pecans").terms.contains("nuts"))
+    }
+
+    func testTidyAmountsAndFractions() {
+        XCTAssertEqual(CookPlanner.tidyAmount("1 and 1/4 cups"), "1¼ cups")
+        XCTAssertEqual(CookPlanner.tidyAmount("1/8 teaspoon"), "⅛ tsp")
+        XCTAssertEqual(CookPlanner.tidyAmount("1.5 tablespoons"), "1½ tbsp")
+        XCTAssertEqual(CookPlanner.tidyAmount("0.5 cup"), "½ cup")
+        XCTAssertEqual(CookPlanner.prettyFractions(in: "Add 1/3 cup sugar and 1 1/2 cups milk; cut into 3/4-inch pieces."),
+                       "Add ⅓ cup sugar and 1½ cups milk; cut into ¾-inch pieces.")
+        XCTAssertEqual(CookPlanner.prettyFractions(in: "Use 3/16 inch and 1.5 cups."), "Use 3/16 inch and 1½ cups.", "no glyph, no change")
+        XCTAssertEqual(CookPlanner.durations(in: "Bake for 1 and 1/2 hours.").first?.seconds, 5400)
     }
 
     func testParseIngredient_extrasAfterAPlusAreNotPartOfTheName() {

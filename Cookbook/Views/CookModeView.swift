@@ -78,8 +78,8 @@ struct CookModeView: View {
 
     private var currentText: String {
         guard directions.indices.contains(stepIndex) else { return "" }
-        if prefersShortSteps, let short = currentStep.shortText { return short }
-        return directions[stepIndex].text.sanitizedForDisplay
+        if prefersShortSteps, let short = currentStep.shortText { return CookPlanner.prettyFractions(in: short) }
+        return CookPlanner.prettyFractions(in: directions[stepIndex].text.sanitizedForDisplay)
     }
 
     var body: some View {

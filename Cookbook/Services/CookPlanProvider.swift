@@ -19,7 +19,7 @@ final class CookPlanProvider: ObservableObject {
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
     /// Bumping this drops every cached plan, e.g. after changing the prompt.
-    private static let version = 12
+    private static let version = 13
 
     func plan(for recipe: Recipe) -> CookPlan {
         if keys[recipe.id] == Self.key(for: recipe), let plan = plans[recipe.id] {

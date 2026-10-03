@@ -253,13 +253,13 @@ nonisolated enum CookPlanner {
 
             let amount = use.amount.trimmingCharacters(in: .whitespaces)
             let allowedNumbers = numbers(in: original).union(numbers(in: ingredientTexts[index]))
-            let trustedAmount = amount.isEmpty || !numbers(in: amount).isSubset(of: allowedNumbers) ? nil : prettyQuantity(amount)
+            let trustedAmount = amount.isEmpty || !numbers(in: amount).isSubset(of: allowedNumbers) ? nil : tidyAmount(amount)
 
             let suggestedName = use.name.trimmingCharacters(in: .whitespaces)
             let nameFits = suggestedName.count <= 40 && !highlightRanges(in: suggestedName, terms: ingredient.terms).isEmpty
             // A bare count needs the full name to read right: "3 large garlic cloves", not "3 garlic"
             let amountShown = trustedAmount ?? ingredient.amount
-            let isBareCount = !amountShown.isEmpty && amountShown.allSatisfy { $0.isNumber || "½¼¾⅓⅔⅛–/. ".contains($0) }
+            let isBareCount = !amountShown.isEmpty && amountShown.allSatisfy { $0.isNumber || "½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕–/. ".contains($0) }
             let name = nameFits && !isBareCount ? suggestedName : ingredient.name
             let terms = uniqued(ingredient.terms + (nameFits ? [suggestedName.lowercased()] : []))
 
@@ -469,9 +469,16 @@ nonisolated enum CookPlanner {
         for extra in [" + ", "+", " plus "] {
             if let range = name.range(of: extra, options: .caseInsensitive) { name = String(name[..<range.lowerBound]) }
         }
+        // "whole or 2 percent milk" is whole milk or 2 percent milk, but "salt
+        // and black pepper" isn't black salt
         let parts = name.lowercased()
-            .replacingOccurrences(of: " or ", with: " and ")
             .components(separatedBy: " and ")
+            .flatMap { group -> [String] in
+                let options = group.components(separatedBy: " or ")
+                guard options.count > 1, let last = options.last?.split(separator: " "), last.count > 1,
+                      let noun = last.last else { return options }
+                return options.map { $0.split(separator: " ").count == 1 ? "\($0) \(noun)" : $0 }
+            }
         var terms: [String] = []
         for part in parts {
             var words = part
@@ -491,6 +498,11 @@ nonisolated enum CookPlanner {
                 terms.append(last)
             }
         }
+        let words = name.lowercased().components(separatedBy: CharacterSet.letters.inverted)
+        for family in families where !terms.contains(family.term) && words.contains(where: family.includes) {
+            if !words.contains(where: { notTheThing.contains($0) }) { terms.append(family.term) }
+        }
+
         var withVariants: [String] = []
         for term in terms {
             withVariants.append(term)
@@ -562,7 +574,7 @@ nonisolated enum CookPlanner {
     static func durations(in text: String) -> [CookDuration] {
         // "20 to 25 minutes", "1 1/2 hours", "about 1½ hours"; never the "2
         // hours" inside "1/2 hours"
-        let number = #"(\d+(?:\.\d+)?(?:\s+\d/\d|\s*[½¼¾⅓⅔])?|\d/\d|[½¼¾⅓⅔])"#
+        let number = #"(\d+(?:\.\d+)?(?:(?:\s+and)?\s+\d/\d|\s*[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕])?|\d/\d|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕])"#
         let regex = try! NSRegularExpression(
             pattern: #"(?<![\w/.])(?:(?:about|around|roughly)\s+)?"# + number + #"(?:\s*(?:to|-|–|or)\s*"# + number
                 + #")?(?:\s+(?:more|additional|longer))?\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?)\b"#,
@@ -602,14 +614,15 @@ nonisolated enum CookPlanner {
 
     /// "1 1/2" → 1.5, "½" → 0.5, "2.5" → 2.5
     private static func amount(_ text: String) -> Double? {
-        let fractions: [Character: Double] = ["½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1.0 / 3, "⅔": 2.0 / 3]
+        let fractions: [Character: Double] = ["½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1.0 / 3, "⅔": 2.0 / 3, "⅛": 0.125,
+                                              "⅜": 0.375, "⅝": 0.625, "⅞": 0.875, "⅙": 1.0 / 6, "⅚": 5.0 / 6, "⅕": 0.2]
         var rest = text.trimmingCharacters(in: .whitespaces)
         var total = 0.0
         if let last = rest.last, let fraction = fractions[last] {
             total += fraction
             rest = String(rest.dropLast()).trimmingCharacters(in: .whitespaces)
         }
-        for part in rest.split(separator: " ") {
+        for part in rest.split(separator: " ") where part.lowercased() != "and" {
             let pieces = part.split(separator: "/")
             if pieces.count == 2, let top = Double(pieces[0]), let bottom = Double(pieces[1]), bottom > 0 {
                 total += top / bottom
@@ -672,13 +685,45 @@ nonisolated enum CookPlanner {
 
     // MARK: Helpers
 
+    /// "1 and 1/4" → "1¼", "1/3" → "⅓", "1.5" → "1½", "2-3" → "2–3"
     static func prettyQuantity(_ quantity: String) -> String {
-        var out = quantity
+        var out = quantity.replacingOccurrences(of: #"(\d)\s+and\s+(?=\d+/\d+|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕])"#, with: "$1 ",
+                                                options: [.regularExpression, .caseInsensitive])
+        for (decimal, glyph) in [("5", "½"), ("25", "¼"), ("75", "¾")] {
+            out = out.replacingOccurrences(of: #"(?<![\d.])0?\."# + decimal + #"(?!\d)"#, with: glyph, options: .regularExpression)
+            out = out.replacingOccurrences(of: #"(?<![\d.])(\d+)\."# + decimal + #"(?!\d)"#, with: "$1" + glyph, options: .regularExpression)
+        }
         for (plain, glyph) in fractionGlyphs {
             out = out.replacingOccurrences(of: #"(?<![\d/])"# + NSRegularExpression.escapedPattern(for: plain) + #"(?![\d/])"#, with: glyph, options: .regularExpression)
         }
-        out = out.replacingOccurrences(of: #"(\d) ([½¼¾⅓⅔⅛])"#, with: "$1$2", options: .regularExpression)
+        out = out.replacingOccurrences(of: #"(\d) ([½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕])"#, with: "$1$2", options: .regularExpression)
         return out.replacingOccurrences(of: #"\s*-\s*"#, with: "–", options: .regularExpression)
+    }
+
+    /// An amount as cook mode shows it: "1 and 1/4 cups" → "1¼ cups",
+    /// "1/8 teaspoon" → "⅛ tsp".
+    static func tidyAmount(_ amount: String) -> String {
+        let words = prettyQuantity(amount.trimmingCharacters(in: .whitespaces)).split(separator: " ", omittingEmptySubsequences: true)
+        return words.map { unitAbbreviations[$0.lowercased()] ?? String($0) }.joined(separator: " ")
+    }
+
+    /// Step text with its fractions as glyphs: "1/3 cup" → "⅓ cup", "1 1/2
+    /// hours" → "1½ hours". Fractions without a glyph ("3/16") stay as written.
+    static func prettyFractions(in text: String) -> String {
+        let regex = try! NSRegularExpression(
+            pattern: #"(?<![\w/.])(\d+\s+and\s+\d+/\d+|\d+\s+\d+/\d+|\d+/\d+|\d*\.(?:5|25|75)(?=\s+[a-z]))(?![\d/])"#,
+            options: [.caseInsensitive]
+        )
+        var out = text
+        let ns = text as NSString
+        for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
+            let original = ns.substring(with: match.range)
+            let pretty = prettyQuantity(original)
+            guard pretty.contains(where: { glyphs.contains($0) }), !pretty.contains("/"),
+                  let range = Range(match.range, in: out) else { continue }
+            out.replaceSubrange(range, with: pretty)
+        }
+        return out
     }
 
     private static func sentences(in text: String) -> [String] {
@@ -714,7 +759,7 @@ nonisolated enum CookPlanner {
         return items.filter { seen.insert($0).inserted }
     }
 
-    private static let quantityPattern = #"\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?[½¼¾⅓⅔⅛]?|[½¼¾⅓⅔⅛](?:\s*(?:-|–|to)\s*(?:\d+/\d+|\d+(?:\.\d+)?))?"#
+    private static let quantityPattern = #"\d+\s+and\s+\d+/\d+|\d+\s+and\s+[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]|\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]?|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕](?:\s*(?:-|–|to)\s*(?:\d+/\d+|\d+(?:\.\d+)?))?"#
     private static let unitPattern = "cups?|tablespoons?|tbsps?|tbs|teaspoons?|tsps?|pounds?|lbs?|ounces?|oz|grams?|g|kilograms?|kg|ml|milliliters?|liters?|pinch(?:es)?|dash(?:es)?|cans?|sticks?|bunch(?:es)?|sprigs?|quarts?|pints?|cloves?|heads?|slices?"
 
     private static let unitAbbreviations: [String: String] = [
@@ -727,8 +772,11 @@ nonisolated enum CookPlanner {
     ]
 
     private static let fractionGlyphs: [(String, String)] = [
-        ("1/2", "½"), ("1/4", "¼"), ("3/4", "¾"), ("1/3", "⅓"), ("2/3", "⅔"), ("1/8", "⅛")
+        ("1/2", "½"), ("1/4", "¼"), ("3/4", "¾"), ("1/3", "⅓"), ("2/3", "⅔"), ("1/8", "⅛"),
+        ("3/8", "⅜"), ("5/8", "⅝"), ("7/8", "⅞"), ("1/6", "⅙"), ("5/6", "⅚"), ("1/5", "⅕")
     ]
+
+    private static let glyphs = "½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕"
 
     private static let descriptorWords: Set<String> = [
         "fresh", "freshly", "large", "small", "medium", "extra-virgin", "extra", "virgin",
@@ -737,6 +785,17 @@ nonisolated enum CookPlanner {
         "salted", "whole", "dried", "black", "softened", "melted", "ripe", "raw", "peeled",
         "good", "quality", "good-quality", "plain", "a", "an", "of", "piece", "pieces"
     ]
+
+    /// What the steps call a kind of thing: "blackberries or blueberries" are
+    /// "the berries", "pecans" are "the nuts".
+    private static let families: [(term: String, includes: (String) -> Bool)] = [
+        ("berries", { $0.hasSuffix("berries") || $0.hasSuffix("berry") }),
+        ("nuts", { ["walnuts", "walnut", "pecans", "pecan", "almonds", "hazelnuts", "cashews", "pistachios",
+                    "peanuts", "macadamia", "macadamias"].contains($0) })
+    ]
+
+    /// Almond milk isn't the nuts; strawberry jam isn't the berries.
+    private static let notTheThing: Set<String> = ["milk", "extract", "flour", "butter", "oil", "meal", "paste", "jam", "jelly", "juice", "syrup"]
 
     private static let containerWords: Set<String> = [
         "cloves", "clove", "leaves", "leaf", "sprigs", "sprig", "stalks", "stalk",
