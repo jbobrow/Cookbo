@@ -1,5 +1,45 @@
 import Foundation
 
+// MARK: - Patterns
+
+/// Text patterns, each built once and reused: building one costs far more
+/// than using it, and cook mode matches the same few hundred patterns
+/// against every step each time it lays out.
+nonisolated enum Patterns {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var built: [String: NSRegularExpression] = [:]
+
+    static func regex(_ pattern: String, caseInsensitive: Bool = false) -> NSRegularExpression {
+        let key = (caseInsensitive ? "i:" : "s:") + pattern
+        lock.lock()
+        defer { lock.unlock() }
+        if let regex = built[key] { return regex }
+        let regex = try! NSRegularExpression(pattern: pattern, options: caseInsensitive ? [.caseInsensitive] : [])
+        built[key] = regex
+        return regex
+    }
+}
+
+extension String {
+    /// Whether the pattern matches anywhere.
+    nonisolated func hasPattern(_ pattern: String, caseInsensitive: Bool = false) -> Bool {
+        rangeOfPattern(pattern, caseInsensitive: caseInsensitive) != nil
+    }
+
+    /// Where the pattern first matches.
+    nonisolated func rangeOfPattern(_ pattern: String, caseInsensitive: Bool = false) -> Range<String.Index>? {
+        let regex = Patterns.regex(pattern, caseInsensitive: caseInsensitive)
+        guard let match = regex.firstMatch(in: self, range: NSRange(startIndex..., in: self)) else { return nil }
+        return Range(match.range, in: self)
+    }
+
+    /// Every match replaced by the template ("$1" for a group).
+    nonisolated func replacingPattern(_ pattern: String, with template: String, caseInsensitive: Bool = false) -> String {
+        Patterns.regex(pattern, caseInsensitive: caseInsensitive)
+            .stringByReplacingMatches(in: self, range: NSRange(startIndex..., in: self), withTemplate: template)
+    }
+}
+
 // MARK: - Model
 
 /// What cook mode knows about each step of a recipe: which ingredients go in
@@ -20,7 +60,6 @@ nonisolated struct CookPlan: Codable, Equatable {
     var steps: [CookStep]
     /// The on-device model's one-word names, estimates and overlaps for the
     /// overview, one per step; nil until it has run.
-    var overviewHints: [OverviewHint]? = nil
 
     /// The step where an ingredient (an index into `Recipe.allIngredients`)
     /// first goes in. Next checks it off there.
@@ -358,7 +397,7 @@ nonisolated enum CookPlanner {
     static func acceptedShortText(_ rewrite: String, original: String, ingredientTexts: [String] = []) -> String? {
         // The model sometimes numbers its answer ("1. Set a colander…")
         let rewrite = rewrite
-            .replacingOccurrences(of: #"^\s*\d+[.)]\s+"#, with: "", options: .regularExpression)
+            .replacingPattern(#"^\s*\d+[.)]\s+"#, with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard original.count > 120,
               !rewrite.isEmpty,
@@ -382,7 +421,7 @@ nonisolated enum CookPlanner {
         for (plain, glyph) in fractionGlyphs {
             normalized = normalized.replacingOccurrences(of: glyph, with: " \(plain)")
         }
-        let pattern = try! NSRegularExpression(pattern: #"\d+(?:\.\d+)?(?:/\d+)?"#)
+        let pattern = Patterns.regex(#"\d+(?:\.\d+)?(?:/\d+)?"#)
         let ns = normalized as NSString
         return Set(pattern.matches(in: normalized, range: NSRange(location: 0, length: ns.length)).map {
             ns.substring(with: $0.range)
@@ -398,7 +437,7 @@ nonisolated enum CookPlanner {
         var isReusable = false
 
         // Parentheticals: keep "optional", drop "(about 4 cups)"
-        let parenthetical = try! NSRegularExpression(pattern: #"\s*\(([^)]*)\)"#)
+        let parenthetical = Patterns.regex(#"\s*\(([^)]*)\)"#)
         for match in parenthetical.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
             if let inner = Range(match.range(at: 1), in: text), text[inner].lowercased().contains("optional") {
                 notes.insert("optional", at: 0)
@@ -428,9 +467,9 @@ nonisolated enum CookPlanner {
 
         var amount = ""
         var name = head.trimmingCharacters(in: .whitespaces)
-        let amountPattern = try! NSRegularExpression(
-            pattern: "^\\s*(\(quantityPattern))(?:((?:\\s+(?:packed|heaping|heaped|level|scant|generous|large|small|medium))*)\\s+(\(unitPattern))\\b\\.?)?\\s+",
-            options: [.caseInsensitive]
+        let amountPattern = Patterns.regex(
+            "^\\s*(\(quantityPattern))(?:((?:\\s+(?:packed|heaping|heaped|level|scant|generous|large|small|medium))*)\\s+(\(unitPattern))\\b\\.?)?\\s+",
+            caseInsensitive: true
         )
         let nsName = name as NSString
         if let match = amountPattern.firstMatch(in: name, range: NSRange(location: 0, length: nsName.length)) {
@@ -539,7 +578,7 @@ nonisolated enum CookPlanner {
 
         for (term, tag) in terms.sorted(by: { $0.term.count > $1.term.count }) where !term.isEmpty {
             let escaped = NSRegularExpression.escapedPattern(for: term)
-            guard let regex = try? NSRegularExpression(pattern: "(?<![\\w-])\(escaped)(?![\\w-])", options: [.caseInsensitive]) else { continue }
+            let regex = Patterns.regex("(?<![\\w-])\(escaped)(?![\\w-])", caseInsensitive: true)
             for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
                 guard let range = Range(match.range, in: text),
                       !claimed.contains(where: { $0.overlaps(range) }) else { continue }
@@ -556,9 +595,9 @@ nonisolated enum CookPlanner {
     /// "1 teaspoon" in "toss with 1 teaspoon salt", formatted as "1 tsp".
     static func amount(before range: Range<String.Index>, in text: String) -> String? {
         let before = String(text[..<range.lowerBound])
-        let regex = try! NSRegularExpression(
-            pattern: "(?<![\\w/])(\(quantityPattern))(?:\\s+(\(unitPattern))\\.?)?\\s+(?:of\\s+)?$",
-            options: [.caseInsensitive]
+        let regex = Patterns.regex(
+            "(?<![\\w/])(\(quantityPattern))(?:\\s+(\(unitPattern))\\.?)?\\s+(?:of\\s+)?$",
+            caseInsensitive: true
         )
         let ns = before as NSString
         guard let match = regex.firstMatch(in: before, range: NSRange(location: 0, length: ns.length)) else { return nil }
@@ -575,15 +614,15 @@ nonisolated enum CookPlanner {
         // "20 to 25 minutes", "1 1/2 hours", "about 1½ hours"; never the "2
         // hours" inside "1/2 hours"
         let number = #"(\d+(?:\.\d+)?(?:(?:\s+and)?\s+\d/\d|\s*[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕])?|\d/\d|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕])"#
-        let regex = try! NSRegularExpression(
-            pattern: #"(?<![\w/.])(?:(?:about|around|roughly)\s+)?"# + number + #"(?:\s*(?:to|-|–|or)\s*"# + number
+        let regex = Patterns.regex(
+            #"(?<![\w/.])(?:(?:about|around|roughly)\s+)?"# + number + #"(?:\s*(?:to|-|–|or)\s*"# + number
                 + #")?(?:\s+(?:more|additional|longer))?\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?)\b"#,
-            options: [.caseInsensitive]
+            caseInsensitive: true
         )
         // "a minute or two", "an hour", "half an hour"
-        let words = try! NSRegularExpression(
-            pattern: #"(?<![\w])(?:(?:about|around|roughly)\s+)?(?:(half)\s+an\s+hour|an?\s+(minute|hour)(?:\s+or\s+(two))?)\b"#,
-            options: [.caseInsensitive]
+        let words = Patterns.regex(
+            #"(?<![\w])(?:(?:about|around|roughly)\s+)?(?:(half)\s+an\s+hour|an?\s+(minute|hour)(?:\s+or\s+(two))?)\b"#,
+            caseInsensitive: true
         )
         let ns = text as NSString
         let all = NSRange(location: 0, length: ns.length)
@@ -654,7 +693,7 @@ nonisolated enum CookPlanner {
 
     /// "step 6" mentions, with the sentence they're in.
     static func stepReferences(in text: String) -> [(step: Int, sentence: String)] {
-        let regex = try! NSRegularExpression(pattern: #"\bsteps?\s+(\d+)\b"#, options: [.caseInsensitive])
+        let regex = Patterns.regex(#"\bsteps?\s+(\d+)\b"#, caseInsensitive: true)
         var references: [(Int, String)] = []
         for sentence in sentences(in: text) {
             let ns = sentence as NSString
@@ -673,7 +712,7 @@ nonisolated enum CookPlanner {
             .trimmingCharacters(in: CharacterSet(charactersIn: ".!? "))
             .components(separatedBy: CharacterSet(charactersIn: "—–;,"))
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && $0.range(of: #"\bsteps?\s+\d+"#, options: [.regularExpression, .caseInsensitive]) == nil }
+            .filter { !$0.isEmpty && $0.rangeOfPattern(#"\bsteps?\s+\d+"#, caseInsensitive: true) == nil }
         guard var label = clauses.first else { return nil }
         for verb in ["set aside", "keep", "save", "reserve", "hold", "leave"] where label.lowercased().hasPrefix(verb + " ") {
             label = String(label.dropFirst(verb.count + 1))
@@ -687,17 +726,16 @@ nonisolated enum CookPlanner {
 
     /// "1 and 1/4" → "1¼", "1/3" → "⅓", "1.5" → "1½", "2-3" → "2–3"
     static func prettyQuantity(_ quantity: String) -> String {
-        var out = quantity.replacingOccurrences(of: #"(\d)\s+and\s+(?=\d+/\d+|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕])"#, with: "$1 ",
-                                                options: [.regularExpression, .caseInsensitive])
+        var out = quantity.replacingPattern(#"(\d)\s+and\s+(?=\d+/\d+|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕])"#, with: "$1 ", caseInsensitive: true)
         for (decimal, glyph) in [("5", "½"), ("25", "¼"), ("75", "¾")] {
-            out = out.replacingOccurrences(of: #"(?<![\d.])0?\."# + decimal + #"(?!\d)"#, with: glyph, options: .regularExpression)
-            out = out.replacingOccurrences(of: #"(?<![\d.])(\d+)\."# + decimal + #"(?!\d)"#, with: "$1" + glyph, options: .regularExpression)
+            out = out.replacingPattern(#"(?<![\d.])0?\."# + decimal + #"(?!\d)"#, with: glyph)
+            out = out.replacingPattern(#"(?<![\d.])(\d+)\."# + decimal + #"(?!\d)"#, with: "$1" + glyph)
         }
         for (plain, glyph) in fractionGlyphs {
-            out = out.replacingOccurrences(of: #"(?<![\d/])"# + NSRegularExpression.escapedPattern(for: plain) + #"(?![\d/])"#, with: glyph, options: .regularExpression)
+            out = out.replacingPattern(#"(?<![\d/])"# + NSRegularExpression.escapedPattern(for: plain) + #"(?![\d/])"#, with: glyph)
         }
-        out = out.replacingOccurrences(of: #"(\d) ([½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕])"#, with: "$1$2", options: .regularExpression)
-        return out.replacingOccurrences(of: #"\s*-\s*"#, with: "–", options: .regularExpression)
+        out = out.replacingPattern(#"(\d) ([½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕])"#, with: "$1$2")
+        return out.replacingPattern(#"\s*-\s*"#, with: "–")
     }
 
     /// An amount as cook mode shows it: "1 and 1/4 cups" → "1¼ cups",
@@ -710,9 +748,9 @@ nonisolated enum CookPlanner {
     /// Step text with its fractions as glyphs: "1/3 cup" → "⅓ cup", "1 1/2
     /// hours" → "1½ hours". Fractions without a glyph ("3/16") stay as written.
     static func prettyFractions(in text: String) -> String {
-        let regex = try! NSRegularExpression(
-            pattern: #"(?<![\w/.])(\d+\s+and\s+\d+/\d+|\d+\s+\d+/\d+|\d+/\d+|\d*\.(?:5|25|75)(?=\s+[a-z]))(?![\d/])"#,
-            options: [.caseInsensitive]
+        let regex = Patterns.regex(
+            #"(?<![\w/.])(\d+\s+and\s+\d+/\d+|\d+\s+\d+/\d+|\d+/\d+|\d*\.(?:5|25|75)(?=\s+[a-z]))(?![\d/])"#,
+            caseInsensitive: true
         )
         var out = text
         let ns = text as NSString
@@ -727,7 +765,7 @@ nonisolated enum CookPlanner {
     }
 
     private static func sentences(in text: String) -> [String] {
-        text.replacingOccurrences(of: #"([.!?])\s+"#, with: "$1\n", options: .regularExpression)
+        text.replacingPattern(#"([.!?])\s+"#, with: "$1\n")
             .components(separatedBy: "\n")
     }
 

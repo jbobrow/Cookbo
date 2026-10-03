@@ -30,8 +30,10 @@ enum OrientationLock {
     private static func refreshSupportedOrientations() {
         guard UIDevice.current.userInterfaceIdiom == .phone else { return }
         refresh()
-        // Again once cook mode has finished sliding up, since UIKit doesn't
-        // rotate in the middle of a presentation
+        // Again on the next turn, once cook mode is on screen (it opens
+        // without sliding when the phone is turned), and once more after a
+        // slide, since UIKit doesn't rotate in the middle of a presentation
+        DispatchQueue.main.async { refresh() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { refresh() }
     }
 
