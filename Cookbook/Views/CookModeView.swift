@@ -110,6 +110,8 @@ struct CookModeView: View {
             .padding(.top, isLandscape ? 8 : 4)
             .padding(.bottom, 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .simultaneousGesture(swipe)
         }
         .background(.background)
         #if os(macOS)
@@ -631,6 +633,38 @@ struct CookModeView: View {
         withAnimation(.snappy) {
             stepIndex = previous
             checkedRows = []
+        }
+    }
+
+    /// Swipe left for Next and right for Back, like turning a page
+    private var swipe: some Gesture {
+        DragGesture(minimumDistance: 30)
+            .onEnded { value in
+                let distance = value.translation.width
+                let flung = abs(value.predictedEndTranslation.width) > 160
+                guard abs(distance) > abs(value.translation.height) * 1.5,
+                      abs(distance) > 60 || flung else { return }
+                if distance < 0 { swipeForward() } else { swipeBack() }
+            }
+    }
+
+    private func swipeForward() {
+        // Marking as cooked stays a deliberate tap
+        if introPage != nil {
+            introNext()
+        } else if !isCooked && !isFinished {
+            advance()
+        }
+    }
+
+    private func swipeBack() {
+        switch introPage {
+        case .prep:
+            withAnimation(.snappy) { introPage = .overview }
+        case .overview:
+            break
+        case nil:
+            if !isCooked { goBack() }
         }
     }
 
