@@ -702,9 +702,6 @@ struct CookModeView: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("All \(directions.count) steps done")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
                 Text("Time to eat.")
                     .font(.largeTitle.weight(.bold))
                 Text("Mark it as cooked to add today to this recipe's history. The checkmarks reset for next time.")
