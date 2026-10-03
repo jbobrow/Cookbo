@@ -462,7 +462,9 @@ nonisolated enum CookIntroPlanner {
     // MARK: Prep
 
     /// The knife work, grouped into one card per cut and the step that first
-    /// needs it, in the order it's needed. Measuring stays in the steps.
+    /// needs it, in the order it's needed. The same thing cut the same way
+    /// for a later step goes on the earlier card: chop all the cilantro at
+    /// once. Measuring stays in the steps.
     static func prepTasks(for recipe: Recipe, plan: CookPlan) -> [PrepTask] {
         struct Cut { var verb: String; var step: Int; var index: Int; var amount: String; var name: String; var noun: String }
         var cuts: [Cut] = []
@@ -488,6 +490,16 @@ nonisolated enum CookIntroPlanner {
             cuts.append(Cut(verb: verb, step: step, index: index, amount: parsed.amount, name: name, noun: noun))
         }
 
+        var firstStep: [String: Int] = [:]
+        for cut in cuts.sorted(by: { ($0.step, $0.index) < ($1.step, $1.index) }) {
+            firstStep[cut.verb + " " + cut.noun] = firstStep[cut.verb + " " + cut.noun] ?? cut.step
+        }
+        cuts = cuts.map { cut in
+            var cut = cut
+            cut.step = firstStep[cut.verb + " " + cut.noun] ?? cut.step
+            return cut
+        }
+
         var groups: [[Cut]] = []
         for cut in cuts.sorted(by: { ($0.step, $0.index) < ($1.step, $1.index) }) {
             if let i = groups.firstIndex(where: { $0[0].verb == cut.verb && $0[0].step == cut.step }) {
@@ -500,7 +512,7 @@ nonisolated enum CookIntroPlanner {
         return groups.map { group in
             let verb = group[0].verb
             let title: String
-            if group.count == 1 {
+            if Set(group.map(\.noun)).count == 1 {
                 title = "\(verb) the \(group[0].noun)"
             } else if group.allSatisfy({ isProduce($0.noun) }) {
                 title = "\(verb) the vegetables"

@@ -258,9 +258,10 @@ final class CookIntroTests: XCTestCase {
 
     func testPrep_gluedAmountsReadAsAmounts() {
         let tasks = CookIntroPlanner.prepTasks(for: caesar, plan: CookPlanner.heuristicPlan(for: caesar))
-        let garlic = tasks.first { $0.ingredientIndices == [2] }
+        let garlic = tasks.first { $0.ingredientIndices.contains(2) }
         XCTAssertEqual(garlic?.title, "Mince the garlic")
-        XCTAssertEqual(garlic?.detail, "1 large garlic clove")
+        XCTAssertEqual(garlic?.detail, "1 large garlic clove, 4 garlic cloves", "for the dressing and the croutons")
+        XCTAssertEqual(tasks.first { $0.ingredientIndices == [1] }?.title, "Mince the anchovy")
     }
 
     func testPrep_slicesAsANounArentACut() {
@@ -337,6 +338,27 @@ final class CookIntroTests: XCTestCase {
         ])
         XCTAssertEqual(CookIntroPlanner.prepTasks(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe)).map(\.title),
                        ["Mince the ginger and garlic"])
+    }
+
+    func testPrep_theSameCutForTwoStepsIsOneCard() {
+        let recipe = Recipe(
+            ingredients: [
+                Ingredient(text: "2 Tbsp Finely Chopped Fresh Cilantro"),
+                Ingredient(text: "1 Cup Long Grain White Rice"),
+                Ingredient(text: "1 shallot, minced"),
+                Ingredient(text: "3 Tbsp Finely Chopped Fresh Cilantro"),
+                Ingredient(text: "1 jalapeño, minced")
+            ],
+            directions: [
+                Direction(text: "Toss the chicken with the cilantro.", order: 1),
+                Direction(text: "Cook the rice with the shallot.", order: 2),
+                Direction(text: "Stir the cilantro and jalapeño into the rice.", order: 3)
+            ]
+        )
+        let tasks = CookIntroPlanner.prepTasks(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe))
+        XCTAssertEqual(tasks.map(\.title), ["Chop the cilantro", "Mince the shallot", "Mince the jalapeño"])
+        XCTAssertEqual(tasks[0].detail, "2 Tbsp Fresh Cilantro, 3 Tbsp Fresh Cilantro")
+        XCTAssertEqual(tasks[0].ingredientIndices, [0, 3], "on the card for the first step that needs it")
     }
 
     func testPrep_jalapenosAreVegetables() {
