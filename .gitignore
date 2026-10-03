@@ -5,3 +5,6 @@ AppStore/
 
 # Local Claude Code settings
 .claude/
+
+# Per-user Xcode state (scheme order, breakpoints)
+xcuserdata/
