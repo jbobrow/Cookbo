@@ -141,12 +141,7 @@ struct CookModeView: View {
             // A timer's Live Activity for this recipe was tapped
             guard let request, request.recipeID == recipe.id else { return }
             store.pendingCookStep = nil
-            isCooked = false
-            introPage = nil
-            withAnimation(.snappy) {
-                stepIndex = min(max(request.step, 0), max(directions.count - 1, 0))
-                checkedRows = []
-            }
+            showStep(request.step)
         }
         .onDisappear {
             if store.cookingRecipeID == recipe.id { store.cookingRecipeID = nil }
@@ -191,6 +186,12 @@ struct CookModeView: View {
                 ForEach(timerStore.timers(for: recipe.id).filter { $0.step != stepIndex || isFinished }) { timer in
                     CookTimerPill(timer: timer, tint: Self.timerTint)
                 }
+            }
+
+            // Any timer running, from any step or recipe, shows as a small
+            // blue status icon; tapping it lists them
+            CookTimersButton(tint: Self.timerTint, recipeID: recipe.id) { step in
+                showStep(step)
             }
 
             Text(introPage == .overview ? "Overview" : introPage == .prep ? "Prep"
@@ -676,6 +677,18 @@ struct CookModeView: View {
             break
         case nil:
             if !isCooked { goBack() }
+        }
+    }
+
+    /// Straight to a timer's step, from its Live Activity or the timer list.
+    private func showStep(_ step: Int) {
+        let target = min(max(step, 0), max(directions.count - 1, 0))
+        isCooked = false
+        introPage = nil
+        movingBack = target < stepIndex
+        withAnimation(.snappy) {
+            stepIndex = target
+            checkedRows = []
         }
     }
 
