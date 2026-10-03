@@ -740,7 +740,9 @@ nonisolated enum CookPlanner {
 
     private static let containerWords: Set<String> = [
         "cloves", "clove", "leaves", "leaf", "sprigs", "sprig", "stalks", "stalk",
-        "heads", "head", "bunch", "pieces", "piece"
+        "heads", "head", "bunch", "pieces", "piece",
+        // "vanilla extract" is "vanilla" in the steps
+        "extract", "essence"
     ]
 
     private static let carryOverStopWords: Set<String> = [

@@ -72,6 +72,17 @@ final class CookPlanTests: XCTestCase {
     func testParseIngredient_containerWordsDropForMatching() {
         XCTAssertTrue(CookPlanner.parseIngredient("3 large garlic cloves, minced").terms.contains("garlic"))
         XCTAssertTrue(CookPlanner.parseIngredient("1/2 packed cup fresh basil leaves").terms.contains("basil"))
+        XCTAssertTrue(CookPlanner.parseIngredient("1 tablespoon vanilla extract").terms.contains("vanilla"))
+    }
+
+    func testHeuristicPlan_vanillaExtractIsVanillaInTheSteps() {
+        let clafoutis = Recipe(
+            ingredients: ["1 and 1/4 cups whole or 2 percent milk", "2/3 cup granulated sugar, divided", "3 eggs",
+                          "1 tablespoon vanilla extract", "1/8 teaspoon salt", "1 cup flour"].map { Ingredient(text: $0) },
+            directions: [Direction(text: "Place the milk, 1/3 cup granulated sugar, eggs, vanilla, salt and flour in a blender. Blend at top speed until smooth and frothy, about 1 minute.", order: 1)]
+        )
+        let plan = CookPlanner.heuristicPlan(for: clafoutis)
+        XCTAssertTrue(plan.steps[0].items.contains { $0.ingredientIndex == 3 }, "vanilla goes in with the rest")
     }
 
     func testParseIngredient_extrasAfterAPlusAreNotPartOfTheName() {
