@@ -131,6 +131,67 @@ final class CookPlanTests: XCTestCase {
         XCTAssertEqual(CookPlanner.parseIngredient("1 1/2 cups flour").amount, "1½ cups")
     }
 
+    func testParseIngredient_numberGluedToTheNextWord() {
+        let garlic = CookPlanner.parseIngredient("1large garlic clove, minced")
+        XCTAssertEqual(garlic.amount, "1")
+        XCTAssertEqual(garlic.name, "large garlic clove")
+        XCTAssertTrue(garlic.terms.contains("garlic"))
+
+        let mustard = CookPlanner.parseIngredient("¾teaspoon Dijon mustard")
+        XCTAssertEqual(mustard.amount, "¾ tsp")
+        XCTAssertEqual(mustard.name, "Dijon mustard")
+
+        XCTAssertEqual(CookPlanner.parseIngredient("1½teaspoons Worcestershire sauce").amount, "1½ tsp")
+        XCTAssertEqual(CookPlanner.parseIngredient("1/2cup skin-on almonds").amount, "½ cup")
+        XCTAssertEqual(CookPlanner.parseIngredient("1large head romaine lettuce").amount, "1 large head")
+        XCTAssertEqual(CookPlanner.parseIngredient("20thin baguette slices").name, "thin baguette slices")
+        XCTAssertEqual(CookPlanner.parseIngredient("475g bread flour").amount, "475 g")
+        XCTAssertEqual(CookPlanner.parseIngredient("4 to 6anchovy fillets, minced").name, "anchovy fillets")
+    }
+
+    func testParseIngredient_ranges() {
+        let anchovies = CookPlanner.parseIngredient("4 to 6 anchovy fillets, minced")
+        XCTAssertEqual(anchovies.amount, "4 to 6")
+        XCTAssertEqual(anchovies.name, "anchovy fillets")
+        XCTAssertEqual(CookPlanner.parseIngredient("12-16 oz fresh mozzarella").amount, "12–16 oz")
+        XCTAssertEqual(CookPlanner.parseIngredient("5 to 6 ounces baby spinach").amount, "5 to 6 oz")
+        XCTAssertEqual(CookPlanner.parseIngredient("¼ to ½ teaspoon red pepper flakes").amount, "¼ to ½ tsp")
+        XCTAssertEqual(CookPlanner.parseIngredient("4 15-ounce cans black beans").amount, "4", "a count, then the can size")
+    }
+
+    func testParseIngredient_checkboxesAndNestedParentheses() {
+        let tomatoes = CookPlanner.parseIngredient("▢ ½ cup cherry tomatoes, sliced (95g)")
+        XCTAssertEqual(tomatoes.amount, "½ cup")
+        XCTAssertEqual(tomatoes.name, "cherry tomatoes")
+        XCTAssertEqual(CookPlanner.parseIngredient("2½ cups shredded whole milk mozzarella cheese ((12 ounces))").name,
+                       "shredded whole milk mozzarella cheese")
+        let parsley = CookPlanner.parseIngredient("2 tablespoons chopped fresh Italian parsley, (for serving (optional))")
+        XCTAssertEqual(parsley.name, "chopped fresh Italian parsley")
+        XCTAssertEqual(parsley.note, "optional")
+    }
+
+    func testParseIngredient_moreUnits() {
+        XCTAssertEqual(CookPlanner.parseIngredient("1/4 c. finely chopped fresh parsley").amount, "¼ cup")
+        XCTAssertEqual(CookPlanner.parseIngredient("8 c. low-sodium chicken stock").amount, "8 cups")
+        let ginger = CookPlanner.parseIngredient("1 thumb ginger, grated")
+        XCTAssertEqual(ginger.amount, "1 thumb")
+        XCTAssertEqual(ginger.name, "ginger")
+        XCTAssertEqual(CookPlanner.parseIngredient("1  handfull  chopped herbs").amount, "1 handful")
+        XCTAssertEqual(CookPlanner.parseIngredient("2 carrots").amount, "2", "c isn't the start of carrots")
+    }
+
+    func testOrSharesTheNounWithAColor() {
+        XCTAssertTrue(CookPlanner.parseIngredient("1 small white or yellow onion (diced)").terms.contains("white onion"))
+        XCTAssertTrue(CookPlanner.parseIngredient("2 pounds baby red or gold potatoes").terms.contains("red potatoes"))
+    }
+
+    func testSpacingGluedNumbersLeavesEverythingElseAlone() {
+        XCTAssertEqual(CookPlanner.spacingGluedNumbers(in: "4 to 6anchovy fillets"), "4 to 6 anchovy fillets")
+        for text in ["1/2 cup", "1½ cups", "1 1/2 cups", "350°F", "a 9x13 pan", "the 2nd rack", "vitamin B12", "1/2-inch slices", "1.5 cups", "12-16 oz"] {
+            XCTAssertEqual(CookPlanner.spacingGluedNumbers(in: text), text)
+        }
+    }
+
     // MARK: - Heuristic plan
 
     func testHeuristicPlan_soupStepsListWhatGoesIn() {

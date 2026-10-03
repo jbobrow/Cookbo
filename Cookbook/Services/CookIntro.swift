@@ -432,22 +432,42 @@ nonisolated enum CookIntroPlanner {
     // MARK: Prep
 
     /// The knife work, grouped into one card per cut and the step that first
-    /// needs it, in the order it's needed. Measuring stays in the steps.
+    /// needs it, in the order it's needed. The same thing cut the same way
+    /// for a later step goes on the earlier card: chop all the cilantro at
+    /// once. Measuring stays in the steps.
     static func prepTasks(for recipe: Recipe, plan: CookPlan) -> [PrepTask] {
         struct Cut { var verb: String; var step: Int; var index: Int; var amount: String; var name: String; var noun: String }
         var cuts: [Cut] = []
         let stepCuts = cutsInSteps(of: recipe)
         for (index, ingredient) in recipe.allIngredients.enumerated() {
+            // "(or use paprika and crushed red pepper)" is another ingredient
             let text = ingredient.text.sanitizedForDisplay
+                .replacingPattern(#"\s*\((?:or|such as)\b[^()]*\)"#, with: "", caseInsensitive: true)
             // A can of diced tomatoes is already cut
-            guard let verb = knifeVerb(in: text) ?? stepCuts[index],
+            let lineVerb = knifeVerb(in: text)
+            guard let verb = lineVerb ?? stepCuts[index],
                   text.rangeOfPattern(#"\b(cans?|canned|jars?|jarred|store-bought|pre-\w+)\b"#, caseInsensitive: true) == nil
             else { continue }
+            // "20 thin baguette slices" are already sliced, whatever the steps say
+            if lineVerb == nil, let pieces = cutPieces[verb],
+               text.hasPattern(#"\b"# + pieces + #"\b"#, caseInsensitive: true) {
+                continue
+            }
             let parsed = CookPlanner.parseIngredient(text)
             let name = cutIngredientName(parsed)
             let noun = titleNoun(for: name)
             let step = plan.firstUseStep(ofIngredient: index) ?? Int.max
             cuts.append(Cut(verb: verb, step: step, index: index, amount: parsed.amount, name: name, noun: noun))
+        }
+
+        var firstStep: [String: Int] = [:]
+        for cut in cuts.sorted(by: { ($0.step, $0.index) < ($1.step, $1.index) }) {
+            firstStep[cut.verb + " " + cut.noun] = firstStep[cut.verb + " " + cut.noun] ?? cut.step
+        }
+        cuts = cuts.map { cut in
+            var cut = cut
+            cut.step = firstStep[cut.verb + " " + cut.noun] ?? cut.step
+            return cut
         }
 
         var groups: [[Cut]] = []
@@ -462,12 +482,15 @@ nonisolated enum CookIntroPlanner {
         return groups.map { group in
             let verb = group[0].verb
             let title: String
-            if group.count == 1 {
+            if Set(group.map(\.noun)).count == 1 {
                 title = "\(verb) the \(group[0].noun)"
             } else if group.allSatisfy({ isProduce($0.noun) }) {
                 title = "\(verb) the vegetables"
             } else {
-                title = "\(verb) the \(naturalList(group.map { $0.noun.split(separator: " ").last.map(String.init) ?? $0.noun }))"
+                // Ginger for the wontons and ginger for the soup is "the ginger"
+                var seen: Set<String> = []
+                let nouns = group.map { $0.noun.split(separator: " ").last.map(String.init) ?? $0.noun }
+                title = "\(verb) the \(naturalList(nouns.filter { seen.insert($0).inserted }))"
             }
             let detail = group.map { [$0.amount, $0.name].filter { !$0.isEmpty }.joined(separator: " ") }
                 .joined(separator: ", ")
@@ -492,13 +515,21 @@ nonisolated enum CookIntroPlanner {
             .map(\.task)
     }
 
+    /// What each cut leaves you with, for ingredients that come that way.
+    private static let cutPieces: [String: String] = [
+        "Slice": "slices", "Cube": "cubes", "Halve": "halves", "Quarter": "quarters"
+    ]
+
     private static let measuringUnits: Set<String> = [
         "cup", "cups", "tbsp", "tsp", "lb", "oz", "g", "kg", "ml", "l", "quart", "quarts", "pint", "pints"
     ]
 
     /// Cuts the steps ask for instead of the ingredient list ("Cut the onion
     /// into a ½-inch dice"): the cut and the ingredient have to be in the same
-    /// clause, so "sprinkle the basil, then slice and serve" isn't one.
+    /// clause, so "sprinkle the basil, then slice and serve" isn't one. A cut
+    /// that's a noun ("swipe the slices around the pan") only counts after
+    /// "into" ("cut the ginger into ½-inch slices"), and one that's part of
+    /// an ingredient's name ("the baguette slices") doesn't count at all.
     static func cutsInSteps(of recipe: Recipe) -> [Int: String] {
         let parsed = recipe.allIngredients.map { CookPlanner.parseIngredient($0.text) }
         var found: [Int: String] = [:]
@@ -506,15 +537,30 @@ nonisolated enum CookIntroPlanner {
             let clauses = step.text.sanitizedForDisplay.components(separatedBy: CharacterSet(charactersIn: ".,;:!?"))
             for clause in clauses {
                 let lowered = clause.lowercased()
-                guard let verb = stepKnifeWords.first(where: {
-                    lowered.hasPattern(#"\b"# + $0.0 + #"\b"#)
+                // Most clauses cut nothing; only look for ingredients in ones that might
+                guard stepKnifeWords.contains(where: { lowered.contains($0.0) }) else { continue }
+                let matches = CookPlanner.ingredientMatches(in: lowered, parsed: parsed)
+                guard let verb = stepKnifeWords.first(where: { word, _ in
+                    lowered.rangesOfPattern(#"\b"# + word + #"\b"#).contains { range in
+                        !matches.contains { $0.range.overlaps(range) }
+                            && (!isCutNoun(at: range, in: lowered) || lowered[..<range.lowerBound].contains("into"))
+                    }
                 })?.1 else { continue }
-                for match in CookPlanner.ingredientMatches(in: clause, parsed: parsed) where found[match.ingredient] == nil {
+                for match in matches where found[match.ingredient] == nil {
                     found[match.ingredient] = verb
                 }
             }
         }
         return found
+    }
+
+    /// "the slices", "a slice of", "each cut": the thing, not the action.
+    private static func isCutNoun(at range: Range<String.Index>, in text: String) -> Bool {
+        let word = text[range]
+        let before = text[..<range.lowerBound].split(separator: " ").last.map(String.init) ?? ""
+        let after = text[range.upperBound...].split(separator: " ").first.map(String.init) ?? ""
+        return word.hasSuffix("s") || after == "of"
+            || ["a", "an", "the", "each", "every", "one", "their", "your", "these", "those"].contains(before)
     }
 
     private static let stepKnifeWords: [(String, String)] = [
@@ -541,18 +587,46 @@ nonisolated enum CookIntroPlanner {
 
     /// What's being cut. Usually the name ("garlic" from "2 cloves garlic,
     /// minced"), but when the cut comes first ("freshly grated low-moisture,
-    /// part-skim mozzarella cheese") it's what follows the cut.
+    /// part-skim mozzarella cheese") it's what follows the cut, and in a list
+    /// ("lime wedges, sour cream and sliced avocado") it's the one that's cut.
     private static func cutIngredientName(_ parsed: CookPlanner.ParsedIngredient) -> String {
         let lowered = parsed.name.lowercased()
         for (word, _) in knifeWords {
             guard let range = lowered.rangeOfPattern(#"\b"# + word + #"\b"#) else { continue }
-            let offset = lowered.distance(from: lowered.startIndex, to: range.upperBound)
-            var after = String(parsed.name.dropFirst(offset))
-            if !parsed.note.isEmpty, !after.contains("+") { after += " " + parsed.note }
-            let name = cleanedName(after.replacingOccurrences(of: ",", with: ""))
-            if !name.isEmpty { return name }
+            var after = String(parsed.name.dropFirst(lowered.distance(from: lowered.startIndex, to: range.upperBound)))
+            // The name runs on past a comma, unless what's after it is a list
+            // ("shredded cheddar, sour cream, and fresh cilantro")
+            if !after.trimmingCharacters(in: .whitespaces).isEmpty, namesAThing(parsed.note), !after.contains("+"),
+               !parsed.note.contains(","), !parsed.note.contains(" and ") {
+                after += " " + parsed.note
+            }
+            if namesAThing(after) {
+                let name = cleanedName(after.replacingOccurrences(of: ",", with: ""))
+                if !name.isEmpty { return name }
+            }
+            // "garlic finely grated or crushed with a press"
+            let before = cleanedName(String(parsed.name.prefix(lowered.distance(from: lowered.startIndex, to: range.lowerBound))))
+            if !before.isEmpty { return before }
+        }
+        for (word, _) in knifeWords {
+            guard let range = parsed.note.rangeOfPattern(#"\b"# + word + #"\b"#, caseInsensitive: true) else { continue }
+            let rest = String(parsed.note[range.upperBound...])
+            let item = rest.rangeOfPattern(#",|;|\band\b|\bor\b"#).map { String(rest[..<$0.lowerBound]) } ?? rest
+            if namesAThing(item) {
+                let name = cleanedName(item)
+                if !name.isEmpty { return name }
+            }
         }
         return cleanedName(parsed.name)
+    }
+
+    /// "avocado" is something; "into rings", "small", "1/8 inch thick" and
+    /// "or crushed" are how it's cut, and "optional" is a note.
+    private static func namesAThing(_ text: some StringProtocol) -> Bool {
+        guard let first = text.split(separator: " ").first?.lowercased(), let letter = first.first, letter.isLetter else { return false }
+        return !["or", "and", "into", "in", "with", "then", "until", "to", "on", "at", "for", "but", "as", "about", "very",
+                 "small", "large", "medium", "fine", "finely", "thin", "thinly", "thick", "thickly", "lengthwise", "crosswise",
+                 "roughly", "coarsely", "evenly", "optional"].contains(first)
     }
 
     /// A short name for a card's title: "garlic" rather than "garlic cloves",
@@ -561,7 +635,8 @@ nonisolated enum CookIntroPlanner {
         let terms = CookPlanner.searchTerms(for: name)
         var words = (terms.first ?? name.lowercased()).split(separator: " ").map(String.init)
         if words.count > 1, let last = words.last,
-           ["cloves", "clove", "leaves", "leaf", "sprigs", "sprig", "stalks", "stalk", "heads", "head", "bunch"].contains(last) {
+           ["cloves", "clove", "leaves", "leaf", "sprigs", "sprig", "stalks", "stalk", "heads", "head", "bunch",
+            "fillets", "fillet"].contains(last) {
             words.removeLast()
         }
         return words.suffix(2).joined(separator: " ")
@@ -583,7 +658,8 @@ nonisolated enum CookIntroPlanner {
         let produce: Set<String> = ["onion", "onions", "carrot", "carrots", "celery", "pepper", "peppers", "zucchini",
                                     "squash", "potato", "potatoes", "tomato", "tomatoes", "mushroom", "mushrooms",
                                     "cabbage", "leek", "leeks", "shallot", "shallots", "eggplant", "broccoli",
-                                    "cauliflower", "kale", "spinach", "cucumber", "fennel", "scallions", "corn"]
+                                    "cauliflower", "kale", "spinach", "cucumber", "fennel", "scallions", "corn",
+                                    "jalapeño", "jalapeños", "jalapeno", "jalapenos"]
         return noun.split(separator: " ").contains { produce.contains(String($0)) }
     }
 
