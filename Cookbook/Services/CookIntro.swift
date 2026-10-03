@@ -468,7 +468,9 @@ nonisolated enum CookIntroPlanner {
         var cuts: [Cut] = []
         let stepCuts = cutsInSteps(of: recipe)
         for (index, ingredient) in recipe.allIngredients.enumerated() {
+            // "(or use paprika and crushed red pepper)" is another ingredient
             let text = ingredient.text.sanitizedForDisplay
+                .replacingOccurrences(of: #"\s*\((?:or|such as)\b[^()]*\)"#, with: "", options: [.regularExpression, .caseInsensitive])
             // A can of diced tomatoes is already cut
             let lineVerb = knifeVerb(in: text)
             guard let verb = lineVerb ?? stepCuts[index],
@@ -503,7 +505,10 @@ nonisolated enum CookIntroPlanner {
             } else if group.allSatisfy({ isProduce($0.noun) }) {
                 title = "\(verb) the vegetables"
             } else {
-                title = "\(verb) the \(naturalList(group.map { $0.noun.split(separator: " ").last.map(String.init) ?? $0.noun }))"
+                // Ginger for the wontons and ginger for the soup is "the ginger"
+                var seen: Set<String> = []
+                let nouns = group.map { $0.noun.split(separator: " ").last.map(String.init) ?? $0.noun }
+                title = "\(verb) the \(naturalList(nouns.filter { seen.insert($0).inserted }))"
             }
             let detail = group.map { [$0.amount, $0.name].filter { !$0.isEmpty }.joined(separator: " ") }
                 .joined(separator: ", ")
@@ -598,18 +603,46 @@ nonisolated enum CookIntroPlanner {
 
     /// What's being cut. Usually the name ("garlic" from "2 cloves garlic,
     /// minced"), but when the cut comes first ("freshly grated low-moisture,
-    /// part-skim mozzarella cheese") it's what follows the cut.
+    /// part-skim mozzarella cheese") it's what follows the cut, and in a list
+    /// ("lime wedges, sour cream and sliced avocado") it's the one that's cut.
     private static func cutIngredientName(_ parsed: CookPlanner.ParsedIngredient) -> String {
         let lowered = parsed.name.lowercased()
         for (word, _) in knifeWords {
             guard let range = lowered.range(of: #"\b"# + word + #"\b"#, options: .regularExpression) else { continue }
-            let offset = lowered.distance(from: lowered.startIndex, to: range.upperBound)
-            var after = String(parsed.name.dropFirst(offset))
-            if !parsed.note.isEmpty, !after.contains("+") { after += " " + parsed.note }
-            let name = cleanedName(after.replacingOccurrences(of: ",", with: ""))
-            if !name.isEmpty { return name }
+            var after = String(parsed.name.dropFirst(lowered.distance(from: lowered.startIndex, to: range.upperBound)))
+            // The name runs on past a comma, unless what's after it is a list
+            // ("shredded cheddar, sour cream, and fresh cilantro")
+            if !after.trimmingCharacters(in: .whitespaces).isEmpty, namesAThing(parsed.note), !after.contains("+"),
+               !parsed.note.contains(","), !parsed.note.contains(" and ") {
+                after += " " + parsed.note
+            }
+            if namesAThing(after) {
+                let name = cleanedName(after.replacingOccurrences(of: ",", with: ""))
+                if !name.isEmpty { return name }
+            }
+            // "garlic finely grated or crushed with a press"
+            let before = cleanedName(String(parsed.name.prefix(lowered.distance(from: lowered.startIndex, to: range.lowerBound))))
+            if !before.isEmpty { return before }
+        }
+        for (word, _) in knifeWords {
+            guard let range = parsed.note.range(of: #"\b"# + word + #"\b"#, options: [.regularExpression, .caseInsensitive]) else { continue }
+            let item = parsed.note[range.upperBound...]
+                .split(separator: try! Regex(#",|;|\band\b|\bor\b"#), omittingEmptySubsequences: false).first.map(String.init) ?? ""
+            if namesAThing(item) {
+                let name = cleanedName(item)
+                if !name.isEmpty { return name }
+            }
         }
         return cleanedName(parsed.name)
+    }
+
+    /// "avocado" is something; "into rings", "small", "1/8 inch thick" and
+    /// "or crushed" are how it's cut, and "optional" is a note.
+    private static func namesAThing(_ text: some StringProtocol) -> Bool {
+        guard let first = text.split(separator: " ").first?.lowercased(), let letter = first.first, letter.isLetter else { return false }
+        return !["or", "and", "into", "in", "with", "then", "until", "to", "on", "at", "for", "but", "as", "about", "very",
+                 "small", "large", "medium", "fine", "finely", "thin", "thinly", "thick", "thickly", "lengthwise", "crosswise",
+                 "roughly", "coarsely", "evenly", "optional"].contains(first)
     }
 
     /// A short name for a card's title: "garlic" rather than "garlic cloves",
@@ -618,7 +651,8 @@ nonisolated enum CookIntroPlanner {
         let terms = CookPlanner.searchTerms(for: name)
         var words = (terms.first ?? name.lowercased()).split(separator: " ").map(String.init)
         if words.count > 1, let last = words.last,
-           ["cloves", "clove", "leaves", "leaf", "sprigs", "sprig", "stalks", "stalk", "heads", "head", "bunch"].contains(last) {
+           ["cloves", "clove", "leaves", "leaf", "sprigs", "sprig", "stalks", "stalk", "heads", "head", "bunch",
+            "fillets", "fillet"].contains(last) {
             words.removeLast()
         }
         return words.suffix(2).joined(separator: " ")
@@ -640,7 +674,8 @@ nonisolated enum CookIntroPlanner {
         let produce: Set<String> = ["onion", "onions", "carrot", "carrots", "celery", "pepper", "peppers", "zucchini",
                                     "squash", "potato", "potatoes", "tomato", "tomatoes", "mushroom", "mushrooms",
                                     "cabbage", "leek", "leeks", "shallot", "shallots", "eggplant", "broccoli",
-                                    "cauliflower", "kale", "spinach", "cucumber", "fennel", "scallions", "corn"]
+                                    "cauliflower", "kale", "spinach", "cucumber", "fennel", "scallions", "corn",
+                                    "jalapeño", "jalapeños", "jalapeno", "jalapenos"]
         return noun.split(separator: " ").contains { produce.contains(String($0)) }
     }
 

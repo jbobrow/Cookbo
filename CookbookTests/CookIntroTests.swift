@@ -298,6 +298,56 @@ final class CookIntroTests: XCTestCase {
         XCTAssertEqual(CookIntroPlanner.prepTasks(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe)), [])
     }
 
+    /// The card for a single ingredient line, as "title | detail".
+    private func prepCard(_ line: String) -> String? {
+        let recipe = Recipe(ingredients: [Ingredient(text: line)])
+        return CookIntroPlanner.prepTasks(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe)).first
+            .map { "\($0.title) | \($0.detail)" }
+    }
+
+    func testPrep_namesWhatsActuallyCut() {
+        XCTAssertEqual(prepCard("Fresh parsley, chopped, optional"), "Chop the parsley | Fresh parsley")
+        XCTAssertEqual(prepCard("1 clove garlic finely grated or crushed with a press"), "Grate the garlic | 1 clove garlic")
+        XCTAssertEqual(prepCard("4 cups cooked, shredded chicken"), "Shred the chicken | 4 cups chicken")
+        XCTAssertEqual(prepCard("2 bell peppers diced, any color"), "Dice the bell peppers | 2 bell peppers")
+        XCTAssertEqual(prepCard("1-2 tbsp jalapeno , (optional) finely diced"), "Dice the jalapeno | 1–2 tbsp jalapeno")
+        XCTAssertEqual(prepCard("1 large carrot, peeled, halved lengthwise, sliced 1/8\" thick"), "Slice the carrot | 1 large carrot")
+        XCTAssertEqual(prepCard("2 tablespoons chopped fresh Italian parsley, (for serving (optional))"),
+                       "Chop the italian parsley | 2 tbsp fresh Italian parsley")
+        XCTAssertEqual(prepCard("1 small white or yellow onion (diced)"), "Dice the white onion | 1 small white or yellow onion")
+    }
+
+    func testPrep_inAListItsTheOneThatsCut() {
+        XCTAssertEqual(prepCard("Any combination of lime wedges, sour cream, queso fresco and sliced avocado, for topping"),
+                       "Slice the avocado | avocado")
+        XCTAssertEqual(prepCard("Shredded cheddar, sour cream, and fresh cilantro, for serving"), "Shred the cheddar | cheddar")
+        XCTAssertEqual(prepCard("1 handful of chopped parsley, za’atar, thinly sliced radishes, olive oil"),
+                       "Chop the parsley | 1 handful parsley")
+    }
+
+    func testPrep_anAlternativeIsntCut() {
+        XCTAssertNil(prepCard("1 teaspoon Aleppo pepper (or use paprika and crushed red pepper to taste)"))
+    }
+
+    func testPrep_theSameThingTwiceIsNamedOnce() {
+        let recipe = Recipe(ingredients: [
+            Ingredient(text: "2 Tbsp Fresh Ginger, minced"),
+            Ingredient(text: "1 Tbsp Ginger, minced"),
+            Ingredient(text: "2 Cloves Garlic, minced")
+        ])
+        XCTAssertEqual(CookIntroPlanner.prepTasks(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe)).map(\.title),
+                       ["Mince the ginger and garlic"])
+    }
+
+    func testPrep_jalapenosAreVegetables() {
+        let recipe = Recipe(ingredients: [
+            Ingredient(text: "5 green onions diced"),
+            Ingredient(text: "1 jalapeño finely diced, optional")
+        ])
+        XCTAssertEqual(CookIntroPlanner.prepTasks(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe)).map(\.title),
+                       ["Dice the vegetables"])
+    }
+
     func testKnifeVerbPrefersTheFinalCut() {
         XCTAssertEqual(CookIntroPlanner.knifeVerb(in: "1 pound shallots, halved and thinly sliced"), "Slice")
         XCTAssertEqual(CookIntroPlanner.knifeVerb(in: "2 cloves garlic, pressed or minced"), "Mince")

@@ -393,14 +393,18 @@ nonisolated enum CookPlanner {
 
     static func parseIngredient(_ line: String) -> ParsedIngredient {
         var text = spacingGluedNumbers(in: line.sanitizedForDisplay.trimmingCharacters(in: .whitespacesAndNewlines))
+        // "▢ ½ cup cherry tomatoes": a checkbox copied from the recipe's site
+        text = text.replacingOccurrences(of: #"^[▢☐□◻]\s*"#, with: "", options: .regularExpression)
         var notes: [String] = []
         var reuseNote = ""
         var isReusable = false
 
-        // Parentheticals: keep "optional", drop "(about 4 cups)"
-        let parenthetical = try! NSRegularExpression(pattern: #"\s*\(([^)]*)\)"#)
-        for match in parenthetical.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
-            if let inner = Range(match.range(at: 1), in: text), text[inner].lowercased().contains("optional") {
+        // Parentheticals: keep "optional", drop "(about 4 cups)", innermost
+        // first so "((12 ounces))" and "(for serving (optional))" go entirely
+        let parenthetical = try! NSRegularExpression(pattern: #"\s*\(([^()]*)\)"#)
+        while let match = parenthetical.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+            if let inner = Range(match.range(at: 1), in: text), text[inner].lowercased().contains("optional"),
+               !notes.contains("optional") {
                 notes.insert("optional", at: 0)
             }
             if let whole = Range(match.range, in: text) { text.removeSubrange(whole) }
@@ -438,8 +442,7 @@ nonisolated enum CookPlanner {
             if match.range(at: 3).location != NSNotFound {
                 let adjectives = nsName.substring(with: match.range(at: 2)).trimmingCharacters(in: .whitespaces)
                 if !adjectives.isEmpty { parts.append(adjectives) }
-                let unit = nsName.substring(with: match.range(at: 3))
-                parts.append(unitAbbreviations[unit.lowercased()] ?? unit)
+                parts.append(unitLabel(nsName.substring(with: match.range(at: 3)), quantity: parts[0]))
             }
             amount = parts.joined(separator: " ")
             name = nsName.substring(from: match.range.location + match.range.length)
@@ -489,7 +492,11 @@ nonisolated enum CookPlanner {
                 let options = group.components(separatedBy: " or ")
                 guard options.count > 1, let last = options.last?.split(separator: " "), last.count > 1,
                       let noun = last.last else { return options }
-                return options.map { $0.split(separator: " ").count == 1 ? "\($0) \(noun)" : $0 }
+                // "small white or yellow onion" is a white onion too
+                return options.map { option in
+                    let words = option.split(separator: " ")
+                    return words.count == 1 || words.last.map({ colorWords.contains(String($0)) }) == true ? "\(option) \(noun)" : option
+                }
             }
         var terms: [String] = []
         for part in parts {
@@ -576,8 +583,7 @@ nonisolated enum CookPlanner {
         guard let match = regex.firstMatch(in: before, range: NSRange(location: 0, length: ns.length)) else { return nil }
         var parts = [prettyQuantity(ns.substring(with: match.range(at: 1)))]
         if match.range(at: 2).location != NSNotFound {
-            let unit = ns.substring(with: match.range(at: 2))
-            parts.append(unitAbbreviations[unit.lowercased()] ?? unit)
+            parts.append(unitLabel(ns.substring(with: match.range(at: 2)), quantity: parts[0]))
         }
         return parts.joined(separator: " ")
     }
@@ -771,8 +777,8 @@ nonisolated enum CookPlanner {
         return items.filter { seen.insert($0).inserted }
     }
 
-    private static let quantityPattern = #"\d+\s+and\s+\d+/\d+|\d+\s+and\s+[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]|\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]?|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕](?:\s*(?:-|–|to)\s*(?:\d+/\d+|\d+(?:\.\d+)?))?"#
-    private static let unitPattern = "cups?|tablespoons?|tbsps?|tbs|teaspoons?|tsps?|pounds?|lbs?|ounces?|oz|grams?|g|kilograms?|kg|ml|milliliters?|liters?|pinch(?:es)?|dash(?:es)?|cans?|sticks?|bunch(?:es)?|sprigs?|quarts?|pints?|cloves?|heads?|slices?"
+    private static let quantityPattern = #"\d+(?:\.\d+)?(?:\s*[-–]\s*|\s+to\s+)\d+(?:\.\d+)?(?![/.\d]|\s+\d+/)|\d+\s+and\s+\d+/\d+|\d+\s+and\s+[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]|\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]?|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕](?:\s*(?:-|–|to)\s*(?:\d+/\d+|\d+(?:\.\d+)?|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]))?"#
+    private static let unitPattern = "cups?|tablespoons?|tbsps?|tbs|teaspoons?|tsps?|pounds?|lbs?|ounces?|oz|grams?|g|kilograms?|kg|ml|milliliters?|liters?|pinch(?:es)?|dash(?:es)?|cans?|sticks?|bunch(?:es)?|sprigs?|quarts?|pints?|cloves?|heads?|slices?|handfull?s?|thumbs?|knobs?|c"
 
     private static let unitAbbreviations: [String: String] = [
         "pound": "lb", "pounds": "lb", "lbs": "lb",
@@ -780,7 +786,20 @@ nonisolated enum CookPlanner {
         "teaspoon": "tsp", "teaspoons": "tsp", "tsps": "tsp",
         "ounce": "oz", "ounces": "oz",
         "gram": "g", "grams": "g", "kilogram": "kg", "kilograms": "kg",
-        "milliliter": "ml", "milliliters": "ml", "liter": "l", "liters": "l"
+        "milliliter": "ml", "milliliters": "ml", "liter": "l", "liters": "l",
+        "handfull": "handful", "handfulls": "handfuls"
+    ]
+
+    /// "tablespoons" → "tbsp"; "c." → "cup" or "cups", by the amount.
+    private static func unitLabel(_ unit: String, quantity: String) -> String {
+        if unit.lowercased() == "c" {
+            return quantity == "1" || quantity.allSatisfy({ glyphs.contains($0) }) ? "cup" : "cups"
+        }
+        return unitAbbreviations[unit.lowercased()] ?? unit
+    }
+
+    private static let colorWords: Set<String> = [
+        "white", "yellow", "red", "green", "gold", "golden", "purple", "orange", "brown"
     ]
 
     private static let fractionGlyphs: [(String, String)] = [
