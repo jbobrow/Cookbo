@@ -490,8 +490,8 @@ struct CookModeView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .opacity(checked ? 0.5 : 1)
         }
-        .opacity(item.isPrepared ? 0.55 : 1)
         .contentShape(Rectangle())
     }
 

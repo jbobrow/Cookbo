@@ -85,18 +85,20 @@ struct CookIntroView: View {
         return Button { toggle(index) } label: {
             VStack(alignment: .leading, spacing: 10) {
                 checkCircle(done, size: 28)
-                Text(task.title)
-                    .font(.system(size: 19, weight: .bold))
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(task.detail)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(task.title)
+                        .font(.system(size: 19, weight: .bold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(task.detail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .opacity(done ? 0.5 : 1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
             .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .opacity(done ? 0.5 : 1)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -118,11 +120,11 @@ struct CookIntroView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .opacity(done ? 0.5 : 1)
                 Spacer(minLength: 0)
             }
             .padding(16)
             .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .opacity(done ? 0.5 : 1)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
