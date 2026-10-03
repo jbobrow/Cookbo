@@ -131,6 +131,31 @@ final class CookPlanTests: XCTestCase {
         XCTAssertEqual(CookPlanner.parseIngredient("1 1/2 cups flour").amount, "1½ cups")
     }
 
+    func testParseIngredient_numberGluedToTheNextWord() {
+        let garlic = CookPlanner.parseIngredient("1large garlic clove, minced")
+        XCTAssertEqual(garlic.amount, "1")
+        XCTAssertEqual(garlic.name, "large garlic clove")
+        XCTAssertTrue(garlic.terms.contains("garlic"))
+
+        let mustard = CookPlanner.parseIngredient("¾teaspoon Dijon mustard")
+        XCTAssertEqual(mustard.amount, "¾ tsp")
+        XCTAssertEqual(mustard.name, "Dijon mustard")
+
+        XCTAssertEqual(CookPlanner.parseIngredient("1½teaspoons Worcestershire sauce").amount, "1½ tsp")
+        XCTAssertEqual(CookPlanner.parseIngredient("1/2cup skin-on almonds").amount, "½ cup")
+        XCTAssertEqual(CookPlanner.parseIngredient("1large head romaine lettuce").amount, "1 large head")
+        XCTAssertEqual(CookPlanner.parseIngredient("20thin baguette slices").name, "thin baguette slices")
+        XCTAssertEqual(CookPlanner.parseIngredient("475g bread flour").amount, "475 g")
+        XCTAssertEqual(CookPlanner.parseIngredient("4 to 6anchovy fillets, minced").name, "to 6 anchovy fillets")
+    }
+
+    func testSpacingGluedNumbersLeavesEverythingElseAlone() {
+        XCTAssertEqual(CookPlanner.spacingGluedNumbers(in: "4 to 6anchovy fillets"), "4 to 6 anchovy fillets")
+        for text in ["1/2 cup", "1½ cups", "1 1/2 cups", "350°F", "a 9x13 pan", "the 2nd rack", "vitamin B12", "1/2-inch slices", "1.5 cups", "12-16 oz"] {
+            XCTAssertEqual(CookPlanner.spacingGluedNumbers(in: text), text)
+        }
+    }
+
     // MARK: - Heuristic plan
 
     func testHeuristicPlan_soupStepsListWhatGoesIn() {

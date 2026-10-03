@@ -470,9 +470,15 @@ nonisolated enum CookIntroPlanner {
         for (index, ingredient) in recipe.allIngredients.enumerated() {
             let text = ingredient.text.sanitizedForDisplay
             // A can of diced tomatoes is already cut
-            guard let verb = knifeVerb(in: text) ?? stepCuts[index],
+            let lineVerb = knifeVerb(in: text)
+            guard let verb = lineVerb ?? stepCuts[index],
                   text.range(of: #"\b(cans?|canned|jars?|jarred|store-bought|pre-\w+)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
             else { continue }
+            // "20 thin baguette slices" are already sliced, whatever the steps say
+            if lineVerb == nil, let pieces = cutPieces[verb],
+               text.range(of: #"\b"# + pieces + #"\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+                continue
+            }
             let parsed = CookPlanner.parseIngredient(text)
             let name = cutIngredientName(parsed)
             let noun = titleNoun(for: name)
@@ -522,13 +528,21 @@ nonisolated enum CookIntroPlanner {
             .map(\.task)
     }
 
+    /// What each cut leaves you with, for ingredients that come that way.
+    private static let cutPieces: [String: String] = [
+        "Slice": "slices", "Cube": "cubes", "Halve": "halves", "Quarter": "quarters"
+    ]
+
     private static let measuringUnits: Set<String> = [
         "cup", "cups", "tbsp", "tsp", "lb", "oz", "g", "kg", "ml", "l", "quart", "quarts", "pint", "pints"
     ]
 
     /// Cuts the steps ask for instead of the ingredient list ("Cut the onion
     /// into a ½-inch dice"): the cut and the ingredient have to be in the same
-    /// clause, so "sprinkle the basil, then slice and serve" isn't one.
+    /// clause, so "sprinkle the basil, then slice and serve" isn't one. A cut
+    /// that's a noun ("swipe the slices around the pan") only counts after
+    /// "into" ("cut the ginger into ½-inch slices"), and one that's part of
+    /// an ingredient's name ("the baguette slices") doesn't count at all.
     static func cutsInSteps(of recipe: Recipe) -> [Int: String] {
         let parsed = recipe.allIngredients.map { CookPlanner.parseIngredient($0.text) }
         var found: [Int: String] = [:]
@@ -536,15 +550,28 @@ nonisolated enum CookIntroPlanner {
             let clauses = step.text.sanitizedForDisplay.components(separatedBy: CharacterSet(charactersIn: ".,;:!?"))
             for clause in clauses {
                 let lowered = clause.lowercased()
-                guard let verb = stepKnifeWords.first(where: {
-                    lowered.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil
+                let matches = CookPlanner.ingredientMatches(in: lowered, parsed: parsed)
+                guard let verb = stepKnifeWords.first(where: { word, _ in
+                    lowered.ranges(of: try! Regex(#"\b"# + word + #"\b"#)).contains { range in
+                        !matches.contains { $0.range.overlaps(range) }
+                            && (!isCutNoun(at: range, in: lowered) || lowered[..<range.lowerBound].contains("into"))
+                    }
                 })?.1 else { continue }
-                for match in CookPlanner.ingredientMatches(in: clause, parsed: parsed) where found[match.ingredient] == nil {
+                for match in matches where found[match.ingredient] == nil {
                     found[match.ingredient] = verb
                 }
             }
         }
         return found
+    }
+
+    /// "the slices", "a slice of", "each cut": the thing, not the action.
+    private static func isCutNoun(at range: Range<String.Index>, in text: String) -> Bool {
+        let word = text[range]
+        let before = text[..<range.lowerBound].split(separator: " ").last.map(String.init) ?? ""
+        let after = text[range.upperBound...].split(separator: " ").first.map(String.init) ?? ""
+        return word.hasSuffix("s") || after == "of"
+            || ["a", "an", "the", "each", "every", "one", "their", "your", "these", "those"].contains(before)
     }
 
     private static let stepKnifeWords: [(String, String)] = [

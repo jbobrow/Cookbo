@@ -392,7 +392,7 @@ nonisolated enum CookPlanner {
     // MARK: Ingredient lines
 
     static func parseIngredient(_ line: String) -> ParsedIngredient {
-        var text = line.sanitizedForDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
+        var text = spacingGluedNumbers(in: line.sanitizedForDisplay.trimmingCharacters(in: .whitespacesAndNewlines))
         var notes: [String] = []
         var reuseNote = ""
         var isReusable = false
@@ -458,6 +458,18 @@ nonisolated enum CookPlanner {
             terms: searchTerms(for: name),
             isReusable: isReusable,
             reuseNote: reuseNote
+        )
+    }
+
+    /// Some imports lose the space after the amount: "1large egg", "4 to
+    /// 6anchovy fillets", "¾teaspoon Dijon mustard". Puts it back, but leaves
+    /// "9x13", "350°F", "2nd" and "B12" alone.
+    static func spacingGluedNumbers(in text: String) -> String {
+        let regex = try! NSRegularExpression(
+            pattern: "(?<![\\p{L}\\d./])(\\d+(?:[./]\\d+)?[\(glyphs)]?|[\(glyphs)])(?=\\p{L}+\\b)(?!(?:st|nd|rd|th)\\b)"
+        )
+        return regex.stringByReplacingMatches(
+            in: text, range: NSRange(location: 0, length: (text as NSString).length), withTemplate: "$1 "
         )
     }
 

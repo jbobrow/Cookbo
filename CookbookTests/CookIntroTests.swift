@@ -138,6 +138,25 @@ final class CookIntroTests: XCTestCase {
         prepDuration: 5 * 60
     )
 
+    /// Caesar's Caesar Salad, imported with no space after the amounts.
+    private let caesar = Recipe(
+        ingredients: [
+            Ingredient(text: "1large head romaine lettuce (about 1 pound)"),
+            Ingredient(text: "4 to 6anchovy fillets, minced"),
+            Ingredient(text: "1large garlic clove, minced"),
+            Ingredient(text: "½cup extra-virgin olive oil"),
+            Ingredient(text: "¼cup finely grated Parmesan, plus more for garnish"),
+            Ingredient(text: "¼cup olive oil"),
+            Ingredient(text: "4garlic cloves, minced"),
+            Ingredient(text: "20thin baguette slices (each about ¼-inch thick)")
+        ],
+        directions: [
+            Direction(text: "Make the croutons: In a small bowl, mix the olive oil and the garlic until well combined. Heat the oven to 375 degrees and set a rack in the middle.", order: 1),
+            Direction(text: "Place the baguette slices on a large baking sheet in a single layer. Generously brush the tops with the garlic oil, then swipe the slices around the pan to make sure their sides underneath soak up the olive oil mixture that soaks through to the bottom.", order: 2),
+            Direction(text: "In a large wooden bowl, mash the anchovies with the garlic. Slowly, pour in the 1/2 cup olive oil, whisking vigorously. Add the grated Parmesan.", order: 3)
+        ]
+    )
+
     func testOverview_preheatInsideAStepGetsItsOwnBar() {
         let overview = CookIntroPlanner.overview(for: salad, plan: CookPlanner.heuristicPlan(for: salad))
         let preheat = overview.blocks.first { $0.word == "Preheat" }
@@ -235,6 +254,48 @@ final class CookIntroTests: XCTestCase {
     func testPrep_soup() {
         let tasks = CookIntroPlanner.prepTasks(for: soup, plan: CookPlanner.heuristicPlan(for: soup))
         XCTAssertEqual(tasks.map(\.title), ["Slice the shallots", "Chop the tomatoes", "Mince the garlic"])
+    }
+
+    func testPrep_gluedAmountsReadAsAmounts() {
+        let tasks = CookIntroPlanner.prepTasks(for: caesar, plan: CookPlanner.heuristicPlan(for: caesar))
+        let garlic = tasks.first { $0.ingredientIndices == [2] }
+        XCTAssertEqual(garlic?.title, "Mince the garlic")
+        XCTAssertEqual(garlic?.detail, "1 large garlic clove")
+    }
+
+    func testPrep_slicesAsANounArentACut() {
+        let tasks = CookIntroPlanner.prepTasks(for: caesar, plan: CookPlanner.heuristicPlan(for: caesar))
+        let cut = Set(tasks.flatMap(\.ingredientIndices))
+        XCTAssertFalse(cut.contains(3), "swiping the slices through the olive oil doesn't slice the oil")
+        XCTAssertFalse(cut.contains(5))
+        XCTAssertFalse(cut.contains(7), "the baguette comes sliced")
+        XCTAssertNil(CookIntroPlanner.cutsInSteps(of: caesar)[3])
+    }
+
+    func testCutsInSteps_aCutMustBeTheAction() {
+        let recipe = Recipe(
+            ingredients: [
+                Ingredient(text: "1 lemon"),
+                Ingredient(text: "1 pound asparagus"),
+                Ingredient(text: "1 knob ginger"),
+                Ingredient(text: "4 slices bread"),
+                Ingredient(text: "1 onion")
+            ],
+            directions: [
+                Direction(text: "Place the lemon slices between the asparagus spears.", order: 1),
+                Direction(text: "Cut the ginger into 1/2-inch slices and smash. Toast the bread slices.", order: 2),
+                Direction(text: "Thinly slice the onion.", order: 3)
+            ]
+        )
+        XCTAssertEqual(CookIntroPlanner.cutsInSteps(of: recipe), [2: "Slice", 4: "Slice"])
+    }
+
+    func testPrep_comesInPiecesAlready() {
+        let recipe = Recipe(
+            ingredients: [Ingredient(text: "20 thin baguette slices"), Ingredient(text: "1 cup bread cubes")],
+            directions: [Direction(text: "Slice the baguette slices. Cube the bread cubes.", order: 1)]
+        )
+        XCTAssertEqual(CookIntroPlanner.prepTasks(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe)), [])
     }
 
     func testKnifeVerbPrefersTheFinalCut() {
