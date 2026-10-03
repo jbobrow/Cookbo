@@ -470,12 +470,17 @@ struct CookModeView: View {
               let index = Int(url.lastPathComponent),
               durations.indices.contains(index) else { return .systemAction }
         let duration = durations[index]
-        if let timer = timerStore.timer(for: recipe.id, step: stepIndex, label: duration.label) {
-            // A finished timer just clears; a running one asks first
-            if timer.isDone(at: Date()) { timerStore.stop(timer) } else { timerToStop = timer }
-        } else {
-            timerStore.start(recipe: recipe, step: stepIndex, duration: duration)
-            hasStartedTimer = true
+        let step = stepIndex
+        // SwiftUI can call this in the middle of updating the view, which is
+        // no time to change the timers it's showing; do it straight after
+        DispatchQueue.main.async {
+            if let timer = timerStore.timer(for: recipe.id, step: step, label: duration.label) {
+                // A finished timer just clears; a running one asks first
+                if timer.isDone(at: Date()) { timerStore.stop(timer) } else { timerToStop = timer }
+            } else {
+                timerStore.start(recipe: recipe, step: step, duration: duration)
+                hasStartedTimer = true
+            }
         }
         return .handled
     }

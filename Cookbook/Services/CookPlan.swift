@@ -149,7 +149,7 @@ nonisolated struct SuggestedStep {
 // MARK: - Recipe progress helpers
 
 extension Recipe {
-    var orderedDirections: [Direction] {
+    nonisolated var orderedDirections: [Direction] {
         directions.sorted { $0.order < $1.order }
     }
 
