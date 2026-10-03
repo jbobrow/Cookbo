@@ -53,6 +53,13 @@ nonisolated struct PrepTask: Equatable {
     var ingredientIndices: [Int]
 }
 
+/// An ingredient to measure out before the heat goes on: "¼ cup" of "olive oil".
+nonisolated struct MeasureTask: Equatable {
+    var amount: String
+    var name: String
+    var ingredientIndex: Int
+}
+
 /// The stages every overview is told in. A small, fixed set, so every recipe
 /// reads the same way: the oven heating while you prep, then Mix, Bake, Serve.
 nonisolated enum CookStage: String, CaseIterable, Codable {
@@ -497,6 +504,27 @@ nonisolated enum CookIntroPlanner {
             return PrepTask(title: title, detail: detail, ingredientIndices: group.map(\.index))
         }
     }
+
+    /// Everything with a measured amount that isn't already on a cut card, in
+    /// the order it's needed. Opening a can or counting cloves isn't measuring.
+    static func measureTasks(for recipe: Recipe, plan: CookPlan) -> [MeasureTask] {
+        let cut = Set(prepTasks(for: recipe, plan: plan).flatMap(\.ingredientIndices))
+        return recipe.allIngredients.enumerated()
+            .compactMap { index, ingredient -> (step: Int, task: MeasureTask)? in
+                guard !cut.contains(index) else { return nil }
+                let parsed = CookPlanner.parseIngredient(ingredient.text)
+                guard let unit = parsed.amount.split(separator: " ").last?.lowercased(),
+                      measuringUnits.contains(unit), !parsed.name.isEmpty else { return nil }
+                let step = plan.firstUseStep(ofIngredient: index) ?? Int.max
+                return (step, MeasureTask(amount: parsed.amount, name: parsed.name, ingredientIndex: index))
+            }
+            .sorted { ($0.step, $0.task.ingredientIndex) < ($1.step, $1.task.ingredientIndex) }
+            .map(\.task)
+    }
+
+    private static let measuringUnits: Set<String> = [
+        "cup", "cups", "tbsp", "tsp", "lb", "oz", "g", "kg", "ml", "l", "quart", "quarts", "pint", "pints"
+    ]
 
     /// Cuts the steps ask for instead of the ingredient list ("Cut the onion
     /// into a ½-inch dice"): the cut and the ingredient have to be in the same

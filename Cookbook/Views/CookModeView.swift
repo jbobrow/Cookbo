@@ -37,6 +37,8 @@ struct CookModeView: View {
     @State private var introPage: CookIntroView.Page?
     /// Prep cards checked off, by position in the prep list.
     @State private var prepped: Set<Int> = []
+    /// Measured ingredients checked off, by position in the measure list.
+    @State private var measured: Set<Int> = []
 
     init(recipe: Binding<Recipe>, accentColor: Color, enteredByRotation: Bool, startStep: Int? = nil) {
         _recipe = recipe
@@ -58,6 +60,13 @@ struct CookModeView: View {
     private var prepTasks: [PrepTask] {
         CookIntroPlanner.prepTasks(for: recipe, plan: plan)
     }
+
+    private var measureTasks: [MeasureTask] {
+        CookIntroPlanner.measureTasks(for: recipe, plan: plan)
+    }
+
+    /// The prep screen shows when there's anything to cut or measure.
+    private var hasPrepPage: Bool { !prepTasks.isEmpty || !measureTasks.isEmpty }
 
     private var directions: [Direction] { recipe.orderedDirections }
     private var plan: CookPlan { plans.plan(for: recipe) }
@@ -88,6 +97,8 @@ struct CookModeView: View {
                         overviewLoading: plans.overviewPending.contains(recipe.id),
                         prepTasks: prepTasks,
                         prepped: $prepped,
+                        measureTasks: measureTasks,
+                        measured: $measured,
                         accentColor: accentColor,
                         isLandscape: isLandscape,
                         onNext: introNext,
@@ -201,7 +212,7 @@ struct CookModeView: View {
                 Capsule()
                     .fill(page == .prep ? AnyShapeStyle(accentColor.opacity(0.35)) : AnyShapeStyle(.fill.tertiary))
                     .frame(width: 28, height: 4)
-                    .opacity(prepTasks.isEmpty ? 0 : 1)
+                    .opacity(hasPrepPage ? 1 : 0)
                 Spacer().frame(width: 6)
             }
             ForEach(directions.indices, id: \.self) { index in
@@ -622,7 +633,7 @@ struct CookModeView: View {
     private func goBack() {
         // Back from step 1 returns to the screens before it
         guard stepIndex > 0 else {
-            withAnimation(.snappy) { introPage = prepTasks.isEmpty ? .overview : .prep }
+            withAnimation(.snappy) { introPage = hasPrepPage ? .prep : .overview }
             return
         }
         let previous = stepIndex - 1
@@ -670,7 +681,7 @@ struct CookModeView: View {
 
     private func introNext() {
         withAnimation(.snappy) {
-            introPage = introPage == .overview && !prepTasks.isEmpty ? .prep : nil
+            introPage = introPage == .overview && hasPrepPage ? .prep : nil
         }
     }
 

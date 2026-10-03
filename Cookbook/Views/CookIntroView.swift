@@ -14,15 +14,22 @@ struct CookIntroView: View {
     var overviewLoading = false
     let prepTasks: [PrepTask]
     @Binding var prepped: Set<Int>
+    let measureTasks: [MeasureTask]
+    @Binding var measured: Set<Int>
     let accentColor: Color
     let isLandscape: Bool
     let onNext: () -> Void
     let onBack: () -> Void
     let onSkip: () -> Void
 
+    /// Measuring is quick, so it stays tucked away under the cutting until
+    /// asked for.
+    @State private var measuresShown = false
+    private var showingMeasures: Bool { prepTasks.isEmpty || measuresShown }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(page == .overview ? (overviewLoading ? " " : overview.totalLabel) : "Cut these first")
+            Text(page == .overview ? (overviewLoading ? " " : overview.totalLabel) : (prepTasks.isEmpty ? "Measure these first" : "Cut these first"))
                 .font(.system(size: isLandscape ? 26 : 30, weight: .bold))
                 .padding(.top, 8)
                 .accessibilityAddTraits(.isHeader)
@@ -56,27 +63,106 @@ struct CookIntroView: View {
 
     // MARK: - Prep
 
-    @ViewBuilder
     private var prepList: some View {
-        if isLandscape {
+        ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: 3), spacing: 14) {
-                    ForEach(prepTasks.indices, id: \.self) { index in
-                        prepCard(index)
+                VStack(alignment: .leading, spacing: 14) {
+                    if isLandscape {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: 3), spacing: 14) {
+                            ForEach(prepTasks.indices, id: \.self) { index in
+                                prepCard(index)
+                            }
+                        }
+                    } else {
+                        VStack(spacing: 12) {
+                            ForEach(prepTasks.indices, id: \.self) { index in
+                                prepRow(index)
+                            }
+                        }
                     }
+                    measureSection
                 }
                 .padding(.vertical, 4)
             }
-        } else {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 12) {
-                    ForEach(prepTasks.indices, id: \.self) { index in
-                        prepRow(index)
-                    }
-                }
-                .padding(.top, 4)
+            .onChange(of: measuresShown) { _, shown in
+                guard shown else { return }
+                withAnimation(.snappy) { proxy.scrollTo(Self.measureHeading, anchor: .top) }
             }
         }
+    }
+
+    private static let measureHeading = "measure"
+
+    @ViewBuilder
+    private var measureSection: some View {
+        if !measureTasks.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                if !prepTasks.isEmpty {
+                    Button {
+                        withAnimation(.snappy) { measuresShown.toggle() }
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("Measure")
+                                .font(.caption.weight(.bold))
+                                .textCase(.uppercase)
+                                .tracking(0.8)
+                                .foregroundStyle(.secondary)
+                            Text("\(measureTasks.count)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                            Spacer(minLength: 0)
+                            Text(measuresShown ? "Hide" : "Show")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(accentColor)
+                        }
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Measure, \(measureTasks.count) ingredients")
+                    .accessibilityValue(measuresShown ? "Shown" : "Hidden")
+                    .accessibilityHint(measuresShown ? "Hides them" : "Shows them")
+                    .id(Self.measureHeading)
+                }
+                if showingMeasures {
+                    measureList
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+            .padding(.top, prepTasks.isEmpty ? 0 : 6)
+        }
+    }
+
+    private var measureList: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 20, alignment: .top), count: isLandscape ? 3 : 1),
+                  alignment: .leading, spacing: 12) {
+            ForEach(measureTasks.indices, id: \.self) { index in
+                measureRow(index)
+            }
+        }
+        .padding(16)
+        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private func measureRow(_ index: Int) -> some View {
+        let task = measureTasks[index]
+        let done = measured.contains(index)
+        return Button {
+            if measured.contains(index) { measured.remove(index) } else { measured.insert(index) }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                checkCircle(done, size: 22)
+                (Text(task.amount + " ").bold() + Text(task.name))
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .opacity(done ? 0.5 : 1)
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(task.amount) \(task.name)")
+        .accessibilityAddTraits(done ? .isSelected : [])
     }
 
     private func prepCard(_ index: Int) -> some View {
@@ -146,7 +232,7 @@ struct CookIntroView: View {
     // MARK: - Buttons
 
     private var nextLabel: String {
-        page == .overview && !prepTasks.isEmpty ? "Prep" : "Start Cooking"
+        page == .overview && (!prepTasks.isEmpty || !measureTasks.isEmpty) ? "Prep" : "Start Cooking"
     }
 
     private var nextButton: some View {

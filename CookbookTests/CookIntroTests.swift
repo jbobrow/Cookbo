@@ -211,6 +211,17 @@ final class CookIntroTests: XCTestCase {
         XCTAssertEqual(tasks[0].detail, "3 large carrots, 1 red bell pepper, 1 medium zucchini, 1 medium yellow onion")
     }
 
+    func testMeasure_whatIsntCutInTheOrderItsNeeded() {
+        let measures = CookIntroPlanner.measureTasks(for: soup, plan: CookPlanner.heuristicPlan(for: soup))
+        XCTAssertEqual(measures.map(\.amount), ["¼ cup", "1 tsp"], "the shallots, tomatoes and garlic are on cut cards; salt has no amount")
+        XCTAssertEqual(measures.first?.name, "extra-virgin olive oil")
+    }
+
+    func testMeasure_cansAndCountsArentMeasuring() {
+        let measures = CookIntroPlanner.measureTasks(for: shakshuka, plan: CookPlanner.heuristicPlan(for: shakshuka))
+        XCTAssertEqual(measures.map(\.name), ["olive oil"], "not the can of tomatoes or the 6 eggs")
+    }
+
     func testPrep_skipsTheCanned() {
         let tasks = CookIntroPlanner.prepTasks(for: lasagna, plan: CookPlanner.heuristicPlan(for: lasagna))
         XCTAssertFalse(tasks.contains { $0.ingredientIndices.contains(7) }, "a can of diced tomatoes is already cut")
