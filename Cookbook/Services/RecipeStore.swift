@@ -11,6 +11,11 @@ class RecipeStore: ObservableObject {
     @Published var shouldShowNewRecipe: Bool = false
     @Published var shouldShowURLImport: Bool = false
     @Published var pendingImportURL: String?
+    /// Set by a cookbook://cook link (a timer's Live Activity or alert) to
+    /// open cook mode at a step.
+    @Published var pendingCookStep: CookStepRequest?
+    /// The recipe cook mode is showing, if it's open.
+    var cookingRecipeID: UUID?
     /// The week-closing Friday the This Week plan was last reviewed for.
     @Published var weekPlanLastHandled: Date?
 
@@ -622,10 +627,22 @@ class RecipeStore: ObservableObject {
         recipes.removeAll { $0.id == recipe.id }
     }
     
-    func addCookedDate(_ recipe: Recipe) {
+    /// Records today as a cooked date and clears every ingredient and step
+    /// checkmark, ready for next time. Returns the saved recipe.
+    @discardableResult
+    func markCooked(_ recipe: Recipe) -> Recipe {
         var updatedRecipe = recipe
+        for s in updatedRecipe.ingredientSections.indices {
+            for i in updatedRecipe.ingredientSections[s].ingredients.indices {
+                updatedRecipe.ingredientSections[s].ingredients[i].isChecked = false
+            }
+        }
+        for i in updatedRecipe.directions.indices {
+            updatedRecipe.directions[i].isCompleted = false
+        }
         updatedRecipe.datesCooked.append(Date())
         saveRecipe(updatedRecipe)
+        return updatedRecipe
     }
 
     // MARK: - Collections
@@ -916,5 +933,30 @@ class RecipeStore: ObservableObject {
         }
 
         return loadedCategories.count
+    }
+}
+
+/// A request to open cook mode at a step, from cookbook://cook?recipe=<id>&step=<n>.
+struct CookStepRequest: Equatable {
+    let recipeID: UUID
+    /// 0-based
+    let step: Int
+
+    /// The link a timer opens: its recipe and step (1-based in the URL).
+    static func url(recipeID: UUID, stepNumber: Int) -> URL? {
+        URL(string: "cookbook://cook?recipe=\(recipeID.uuidString)&step=\(stepNumber)")
+    }
+
+    init(recipeID: UUID, step: Int) {
+        self.recipeID = recipeID
+        self.step = step
+    }
+
+    init?(url: URL) {
+        guard url.scheme == "cookbook", url.host == "cook",
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+              let id = items.first(where: { $0.name == "recipe" })?.value.flatMap(UUID.init(uuidString:)),
+              let number = items.first(where: { $0.name == "step" })?.value.flatMap(Int.init) else { return nil }
+        self.init(recipeID: id, step: max(number - 1, 0))
     }
 }

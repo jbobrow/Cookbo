@@ -4,12 +4,18 @@ import EventKit
 struct RecipeDetailView: View {
     @EnvironmentObject var store: RecipeStore
     @State var recipe: Recipe
+    /// Open cook mode at this step on appear (from a timer's link).
+    var cookAtStep: Int? = nil
+    @State private var cookStartStep: Int?
     @State private var showingEditSheet = false
     @State private var showingDeleteConfirmation = false
     @State private var ingredientToAddToReminders: Ingredient?
     @State private var remindersAlertMessage: String?
     @State private var showingCookedConfirmation = false
     @State private var editingCategory: Category?
+    @State private var isCooking = false
+    @State private var cookingEnteredByRotation = false
+    @State private var isVisible = false
     @Environment(\.dismiss) private var dismiss
     #if os(macOS)
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
@@ -129,6 +135,32 @@ struct RecipeDetailView: View {
                                     .foregroundColor(.secondary)
                             }
                         }
+                    }
+                }
+
+                // Cook mode
+                if !recipe.directions.isEmpty {
+                    VStack(spacing: 8) {
+                        Button(action: { startCooking(byRotation: false) }) {
+                            Label(cookButtonTitle, systemImage: "play.fill")
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .padding(.horizontal)
+                                .background(accentColor)
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                        }
+                        .buttonStyle(.plain)
+
+                        #if os(iOS)
+                        if UIDevice.current.userInterfaceIdiom == .phone {
+                            Label("Or turn your phone sideways", systemImage: "rotate.right")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        #endif
                     }
                 }
                 
@@ -409,7 +441,32 @@ struct RecipeDetailView: View {
                 }
             }
         }
-        .onAppear { store.markViewed(recipe) }
+        .onAppear {
+            store.markViewed(recipe)
+            CookPlanProvider.shared.prepare(recipe)
+            isVisible = true
+            if let step = cookAtStep, cookStartStep == nil, !isCooking {
+                startCooking(byRotation: false, atStep: step)
+            }
+        }
+        .onDisappear { isVisible = false }
+        #if os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            // The recipe page stays upright on iPhone, so watch the phone
+            // itself: turning it sideways opens cook mode, and turning it back
+            // closes it (handled in CookModeView).
+            guard UIDevice.current.orientation.isLandscape,
+                  UIDevice.current.userInterfaceIdiom == .phone,
+                  isVisible, !isCooking, !showingEditSheet, editingCategory == nil,
+                  !recipe.directions.isEmpty else { return }
+            startCooking(byRotation: true)
+        }
+        #endif
+        #if os(macOS)
+        .sheet(isPresented: $isCooking) { cookMode }
+        #else
+        .fullScreenCover(isPresented: $isCooking) { cookMode }
+        #endif
         .sheet(isPresented: $showingEditSheet) {
             RecipeEditView(recipe: recipe)
         }
@@ -486,6 +543,25 @@ struct RecipeDetailView: View {
         }
     }
     
+    private var cookMode: some View {
+        CookModeView(recipe: $recipe, accentColor: accentColor, enteredByRotation: cookingEnteredByRotation, startStep: cookStartStep)
+            .environmentObject(store)
+    }
+
+    private var cookButtonTitle: String {
+        let done = recipe.directions.filter(\.isCompleted).count
+        if done == recipe.directions.count { return "Finish Cooking" }
+        if done > 0 { return "Resume at Step \(recipe.firstIncompleteStepIndex + 1)" }
+        return "Start Cooking"
+    }
+
+    private func startCooking(byRotation: Bool, atStep step: Int? = nil) {
+        CookPlanProvider.shared.prepare(recipe)
+        cookStartStep = step
+        cookingEnteredByRotation = byRotation
+        isCooking = true
+    }
+
     private func toggleThisWeek() {
         recipe.isInThisWeek.toggle()
         store.setInThisWeek(recipe, recipe.isInThisWeek)
@@ -497,21 +573,8 @@ struct RecipeDetailView: View {
             scrollProxy.scrollTo("top", anchor: .top)
         }
 
-        // Reset all ingredient checkmarks
-        for s in 0..<recipe.ingredientSections.count {
-            for i in 0..<recipe.ingredientSections[s].ingredients.count {
-                recipe.ingredientSections[s].ingredients[i].isChecked = false
-            }
-        }
-
-        // Reset all direction completions
-        for i in 0..<recipe.directions.count {
-            recipe.directions[i].isCompleted = false
-        }
-
-        // Record cooked date and save
-        recipe.datesCooked.append(Date())
-        store.saveRecipe(recipe)
+        // Record cooked date, reset checkmarks, and save
+        recipe = store.markCooked(recipe)
 
         // Show confirmation toast
         withAnimation(.spring(duration: 0.4)) {

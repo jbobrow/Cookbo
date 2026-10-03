@@ -14,6 +14,10 @@
 		A1F1E4C2D3B5A6978C0D1E2F /* RecipeFileNamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F1E4C2D3B5A6978C0D1E30 /* RecipeFileNamingTests.swift */; };
 		A1F1E4C2D3B5A6978C0D1E31 /* RecipeFileNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F1E4C2D3B5A6978C0D1E32 /* RecipeFileNaming.swift */; };
 		ACCD62AE2DDB491D75CC75A6 /* CookbookFolders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C38762D6DE52788DB169B7C /* CookbookFolders.swift */; };
+		C00C0DE000000000000000A1 /* CookPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B1 /* CookPlanTests.swift */; };
+		C00C0DE000000000000000A2 /* CookPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B2 /* CookPlan.swift */; };
+		C00C0DE000000000000000A3 /* CookIntroTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B3 /* CookIntroTests.swift */; };
+		C00C0DE000000000000000A4 /* CookIntro.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B4 /* CookIntro.swift */; };
 		C0FFEEB100000000000000 /* RecipeCollectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB111111111110000 /* RecipeCollectionTests.swift */; };
 		C0FFEEB200000000000001 /* WeekPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB211111111110001 /* WeekPlanTests.swift */; };
 		C0FFEEB300000000000002 /* RecipeCollection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB311111111110002 /* RecipeCollection.swift */; };
@@ -21,6 +25,9 @@
 		C0FFEEB500000000000004 /* Recipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB511111111110004 /* Recipe.swift */; };
 		CC000000000000000000000E /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000001 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D65719950EF6A48DF0F78F43 /* CookbookFoldersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */; };
+		DD000000000000000000000E /* CookTimerWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000001 /* CookTimerWidget.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DD0000000000000000000011 /* CookTimerAlarm.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000010 /* CookTimerAlarm.swift */; };
+		DD0000000000000000000012 /* CookTimerAlarm.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000010 /* CookTimerAlarm.swift */; };
 		F0B8B881D22C2B413372F937 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 543D3101572A923451D77D4D /* Foundation.framework */; };
 		F0C11A368A8B4652CD8A31C5 /* Cookbook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A50B367CE7ACD4D440C64C4 /* Cookbook.swift */; };
 		F8F63616CBF0C40478ED1536 /* RecipeParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */; };
@@ -41,6 +48,13 @@
 			remoteGlobalIDString = CC0000000000000000000003;
 			remoteInfo = ShareExtension;
 		};
+		DD000000000000000000000A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2B243B922F0B11D400840694 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD0000000000000000000003;
+			remoteInfo = CookTimerWidget;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -51,6 +65,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				CC000000000000000000000E /* ShareExtension.appex in Embed Foundation Extensions */,
+				DD000000000000000000000E /* CookTimerWidget.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -67,12 +82,18 @@
 		A1F1E4C2D3B5A6978C0D1E30 /* RecipeFileNamingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipeFileNamingTests.swift; sourceTree = "<group>"; };
 		A1F1E4C2D3B5A6978C0D1E32 /* RecipeFileNaming.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecipeFileNaming.swift; path = Cookbook/Services/RecipeFileNaming.swift; sourceTree = SOURCE_ROOT; };
 		BC14C824BE658B885EC73CA4 /* InstagramParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InstagramParserTests.swift; sourceTree = "<group>"; };
+		C00C0DE000000000000000B1 /* CookPlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CookPlanTests.swift; sourceTree = "<group>"; };
+		C00C0DE000000000000000B2 /* CookPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CookPlan.swift; path = Cookbook/Services/CookPlan.swift; sourceTree = SOURCE_ROOT; };
+		C00C0DE000000000000000B3 /* CookIntroTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CookIntroTests.swift; sourceTree = "<group>"; };
+		C00C0DE000000000000000B4 /* CookIntro.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CookIntro.swift; path = Cookbook/Services/CookIntro.swift; sourceTree = SOURCE_ROOT; };
 		C0FFEEB111111111110000 /* RecipeCollectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipeCollectionTests.swift; sourceTree = "<group>"; };
 		C0FFEEB211111111110001 /* WeekPlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WeekPlanTests.swift; sourceTree = "<group>"; };
 		C0FFEEB311111111110002 /* RecipeCollection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecipeCollection.swift; path = Cookbook/Models/RecipeCollection.swift; sourceTree = SOURCE_ROOT; };
 		C0FFEEB411111111110003 /* WeekPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeekPlan.swift; path = Cookbook/Services/WeekPlan.swift; sourceTree = SOURCE_ROOT; };
 		C0FFEEB511111111110004 /* Recipe.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Recipe.swift; path = Cookbook/Models/Recipe.swift; sourceTree = SOURCE_ROOT; };
 		CC0000000000000000000001 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		DD0000000000000000000001 /* CookTimerWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CookTimerWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		DD0000000000000000000010 /* CookTimerAlarm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookTimerAlarm.swift; sourceTree = "<group>"; };
 		E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CookbookFoldersTests.swift; sourceTree = "<group>"; };
 		EA103C360007E0CE64A93FEF /* Category.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Category.swift; path = Cookbook/Models/Category.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -92,6 +113,13 @@
 			);
 			target = CC0000000000000000000003 /* ShareExtension */;
 		};
+		DD000000000000000000000D /* Exceptions for "CookTimerWidget" folder in "CookTimerWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DD0000000000000000000003 /* CookTimerWidget */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -109,6 +137,14 @@
 				CC000000000000000000000D /* Exceptions for "ShareExtension" folder in "ShareExtension" target */,
 			);
 			path = ShareExtension;
+			sourceTree = "<group>";
+		};
+		DD0000000000000000000002 /* CookTimerWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DD000000000000000000000D /* Exceptions for "CookTimerWidget" folder in "CookTimerWidget" target */,
+			);
+			path = CookTimerWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -136,6 +172,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DD0000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -146,6 +189,8 @@
 				A1F1E4C2D3B5A6978C0D1E30 /* RecipeFileNamingTests.swift */,
 				C0FFEEB111111111110000 /* RecipeCollectionTests.swift */,
 				C0FFEEB211111111110001 /* WeekPlanTests.swift */,
+				C00C0DE000000000000000B1 /* CookPlanTests.swift */,
+				C00C0DE000000000000000B3 /* CookIntroTests.swift */,
 				E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */,
 			);
 			path = CookbookTests;
@@ -157,6 +202,7 @@
 				2B243B9C2F0B11D400840694 /* Cookbook */,
 				CC0000000000000000000002 /* ShareExtension */,
 				2B243B9B2F0B11D400840694 /* Products */,
+				DD0000000000000000000002 /* CookTimerWidget */,
 				2B720F512F4D7DC60069FE07 /* Shared */,
 				85FA602B6E03982D7A8725CB /* Frameworks */,
 				02953FCAFBB4A15412C60792 /* CookbookTests */,
@@ -169,6 +215,7 @@
 			children = (
 				2B243B9A2F0B11D400840694 /* Cookbo.app */,
 				CC0000000000000000000001 /* ShareExtension.appex */,
+				DD0000000000000000000001 /* CookTimerWidget.appex */,
 				99965210B2E197AAC6702F05 /* CookbookTests.xctest */,
 			);
 			name = Products;
@@ -178,6 +225,7 @@
 			isa = PBXGroup;
 			children = (
 				2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */,
+				DD0000000000000000000010 /* CookTimerAlarm.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -191,6 +239,8 @@
 				EA103C360007E0CE64A93FEF /* Category.swift */,
 				C0FFEEB311111111110002 /* RecipeCollection.swift */,
 				C0FFEEB411111111110003 /* WeekPlan.swift */,
+				C00C0DE000000000000000B2 /* CookPlan.swift */,
+				C00C0DE000000000000000B4 /* CookIntro.swift */,
 				C0FFEEB511111111110004 /* Recipe.swift */,
 			);
 			name = "Recovered References";
@@ -228,6 +278,7 @@
 			);
 			dependencies = (
 				CC000000000000000000000B /* PBXTargetDependency */,
+				DD000000000000000000000B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				2B243B9C2F0B11D400840694 /* Cookbook */,
@@ -275,6 +326,26 @@
 			productReference = CC0000000000000000000001 /* ShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		DD0000000000000000000003 /* CookTimerWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DD0000000000000000000009 /* Build configuration list for PBXNativeTarget "CookTimerWidget" */;
+			buildPhases = (
+				DD0000000000000000000004 /* Sources */,
+				DD0000000000000000000005 /* Frameworks */,
+				DD0000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				DD0000000000000000000002 /* CookTimerWidget */,
+			);
+			name = CookTimerWidget;
+			productName = CookTimerWidget;
+			productReference = DD0000000000000000000001 /* CookTimerWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -290,6 +361,9 @@
 					};
 					CC0000000000000000000003 = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					DD0000000000000000000003 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -310,6 +384,7 @@
 				2B243B992F0B11D400840694 /* Cookbook */,
 				CC0000000000000000000003 /* ShareExtension */,
 				BA7F2D1B4F4CAADF7BC947F9 /* CookbookTests */,
+				DD0000000000000000000003 /* CookTimerWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -336,6 +411,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DD0000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -344,6 +426,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2B720F522F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */,
+				DD0000000000000000000011 /* CookTimerAlarm.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -352,6 +435,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				2B720F532F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD0000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DD0000000000000000000012 /* CookTimerAlarm.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -366,6 +457,10 @@
 				C0FFEEB200000000000001 /* WeekPlanTests.swift in Sources */,
 				C0FFEEB300000000000002 /* RecipeCollection.swift in Sources */,
 				C0FFEEB400000000000003 /* WeekPlan.swift in Sources */,
+				C00C0DE000000000000000A1 /* CookPlanTests.swift in Sources */,
+				C00C0DE000000000000000A2 /* CookPlan.swift in Sources */,
+				C00C0DE000000000000000A3 /* CookIntroTests.swift in Sources */,
+				C00C0DE000000000000000A4 /* CookIntro.swift in Sources */,
 				C0FFEEB500000000000004 /* Recipe.swift in Sources */,
 				D65719950EF6A48DF0F78F43 /* CookbookFoldersTests.swift in Sources */,
 				ACCD62AE2DDB491D75CC75A6 /* CookbookFolders.swift in Sources */,
@@ -388,6 +483,12 @@
 			isa = PBXTargetDependency;
 			target = CC0000000000000000000003 /* ShareExtension */;
 			targetProxy = CC000000000000000000000A /* PBXContainerItemProxy */;
+		};
+		DD000000000000000000000B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = DD0000000000000000000003 /* CookTimerWidget */;
+			targetProxy = DD000000000000000000000A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -516,7 +617,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = Cookbook/Cookbook.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 25;
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -536,6 +637,7 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To add photos to your recipes";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Cookbo uses Reminders to add ingredients to your Groceries list.";
 				INFOPLIST_KEY_NSRemindersUsageDescription = "Cookbo uses Reminders to add ingredients to your Groceries list.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -550,7 +652,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.4.1;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook;
 				PRODUCT_NAME = Cookbo;
 				REGISTER_APP_GROUPS = YES;
@@ -581,7 +683,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = Cookbook/Cookbook.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 25;
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -601,6 +703,7 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To add photos to your recipes";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Cookbo uses Reminders to add ingredients to your Groceries list.";
 				INFOPLIST_KEY_NSRemindersUsageDescription = "Cookbo uses Reminders to add ingredients to your Groceries list.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -615,7 +718,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.4.1;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook;
 				PRODUCT_NAME = Cookbo;
 				REGISTER_APP_GROUPS = YES;
@@ -665,7 +768,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 25;
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -678,7 +781,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.4.1;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -696,7 +799,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 25;
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -709,7 +812,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.4.1;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -719,6 +822,66 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
 				XROS_DEPLOYMENT_TARGET = 1.3;
+			};
+			name = Release;
+		};
+		DD0000000000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 25;
+				DEVELOPMENT_TEAM = 63KWA2RPU8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CookTimerWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cookbo Timers";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook.CookTimerWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DD0000000000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 25;
+				DEVELOPMENT_TEAM = 63KWA2RPU8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CookTimerWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cookbo Timers";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook.CookTimerWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -769,6 +932,15 @@
 			buildConfigurations = (
 				CC0000000000000000000007 /* Debug */,
 				CC0000000000000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DD0000000000000000000009 /* Build configuration list for PBXNativeTarget "CookTimerWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DD0000000000000000000007 /* Debug */,
+				DD0000000000000000000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

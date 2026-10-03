@@ -19,6 +19,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct CookbookApp: App {
     @StateObject private var recipeStore = RecipeStore()
     @Environment(\.scenePhase) private var scenePhase
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    #endif
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
@@ -44,6 +47,9 @@ struct CookbookApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 checkForSharedURL()
+                // Starts the timer store, which catches up with anything that
+                // happened to cook mode timers while the app wasn't running
+                _ = CookTimerStore.shared
             }
         }
         // Mac only. On iOS an empty .commands {} builds an EmptyView, which only
@@ -106,6 +112,10 @@ struct CookbookApp: App {
     }
 
     private func handleIncomingURL(_ url: URL) {
+        if let request = CookStepRequest(url: url) {
+            recipeStore.pendingCookStep = request
+            return
+        }
         // Handle cookbook://import?url=<encoded-url>
         guard url.scheme == "cookbook",
               url.host == "import",

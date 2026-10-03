@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct RecipeListView: View {
+    @State private var cookLink: CookLinkTarget?
     @EnvironmentObject var store: RecipeStore
     @State private var searchText = ""
     @State private var showingAddRecipe = false
@@ -106,6 +107,17 @@ struct RecipeListView: View {
         return .accentColor
     }
 
+    // MARK: - Links into cook mode
+
+    /// Opens the recipe and cook mode at the step a timer's link asks for.
+    /// Cook mode handles links for the recipe it's already showing.
+    private func openPendingCookLink() {
+        guard let request = store.pendingCookStep, store.cookingRecipeID != request.recipeID,
+              let recipe = store.recipes.first(where: { $0.id == request.recipeID }) else { return }
+        store.pendingCookStep = nil
+        cookLink = CookLinkTarget(recipe: recipe, step: request.step)
+    }
+
     // MARK: - Just Viewed
 
     @ViewBuilder
@@ -179,10 +191,14 @@ struct RecipeListView: View {
         List {
             ForEach(Array(groupedRecipes.enumerated()), id: \.offset) { groupIndex, group in
                 Section {
-                    ForEach(isCollapsed(group.category) && isGrouped ? [] : group.recipes) { recipe in
+                    let shown = isCollapsed(group.category) && isGrouped ? [] : group.recipes
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { position, recipe in
                         NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
                             RecipeRowView(recipe: recipe, showCategory: false)
                         }
+                        #if os(iOS)
+                        .listCardRow(isFirst: position == 0, isLast: position == shown.count - 1)
+                        #endif
                         .swipeActions(edge: .leading) {
                             // First action is also the full-swipe default
                             thisWeekButton(for: recipe)
@@ -212,10 +228,23 @@ struct RecipeListView: View {
                         ) {
                             toggleCollapsed(group.category)
                         }
+                        #if os(iOS)
+                        .listCardHeader()
+                        #endif
                     }
                 }
             }
         }
+        #if os(iOS)
+        // Plain, so each category's header sticks under the filters while
+        // its recipes scroll by; the rows draw their own rounded cards, and
+        // sit inside the card margins so a swipe starts at the card's edge
+        .listStyle(.plain)
+        .contentMargins(.top, 0, for: .scrollContent)
+        .contentMargins(.horizontal, ListCard.margin, for: .scrollContent)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemGroupedBackground))
+        #endif
     }
 
     private var recipeGrid: some View {
@@ -382,6 +411,9 @@ struct RecipeListView: View {
         NavigationStack {
             if store.isICloudAvailable || store.useLocalStorage {
                 mainContent
+                    .navigationDestination(item: $cookLink) { target in
+                        RecipeDetailView(recipe: target.recipe, cookAtStep: target.step)
+                    }
                     .toolbar {
                         toolbarContent
                     }
@@ -403,6 +435,9 @@ struct RecipeListView: View {
                     store.pendingImportURL = nil
                 }
         }
+        .onChange(of: store.pendingCookStep) { _, _ in openPendingCookLink() }
+        // A link that launched the app arrives before the recipes have loaded
+        .onChange(of: store.recipes.count) { _, _ in openPendingCookLink() }
         .onChange(of: store.pendingImportURL) { _, newValue in
             if newValue != nil {
                 showingURLImport = true
@@ -1091,6 +1126,49 @@ struct CollectionChip: View {
     }
 }
 
+#if os(iOS)
+/// Rounded cards in a plain list, which (unlike an inset grouped one) keeps
+/// its section headers pinned while scrolling.
+private enum ListCard {
+    static let margin: CGFloat = 20
+    static let radius: CGFloat = 26
+}
+
+private extension View {
+    /// One row's slice of its section's card: rounded at the top of the
+    /// first row and the bottom of the last.
+    func listCardRow(isFirst: Bool, isLast: Bool) -> some View {
+        let radius = ListCard.radius
+        return self
+            .listRowInsets(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 16))
+            .listRowBackground(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: isFirst ? radius : 0, bottomLeadingRadius: isLast ? radius : 0,
+                    bottomTrailingRadius: isLast ? radius : 0, topTrailingRadius: isFirst ? radius : 0,
+                    style: .continuous
+                )
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+            )
+            .listRowSeparator(isLast ? .hidden : .visible, edges: .bottom)
+            .listRowSeparator(.hidden, edges: .top)
+            .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
+    }
+
+    /// A section header that stays opaque while the cards scroll under it,
+    /// lined up with the card's contents. Headers span the full width,
+    /// outside the list's margins.
+    func listCardHeader() -> some View {
+        self
+            .padding(.horizontal, ListCard.margin + 24)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(uiColor: .systemGroupedBackground))
+            .listRowInsets(EdgeInsets())
+    }
+}
+#endif
+
 /// A category section header that folds its recipes away.
 struct CategorySectionHeader: View {
     let category: Category?
@@ -1233,4 +1311,16 @@ struct CookbookTitleView: View {
 #Preview {
     RecipeListView()
         .environmentObject(RecipeStore())
+}
+
+/// A recipe page to open with cook mode at a step, from a timer's link.
+struct CookLinkTarget: Hashable {
+    let recipe: Recipe
+    let step: Int
+
+    static func == (a: Self, b: Self) -> Bool { a.recipe.id == b.recipe.id && a.step == b.step }
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(recipe.id)
+        hasher.combine(step)
+    }
 }

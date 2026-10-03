@@ -91,21 +91,14 @@ struct CookbookSwitcherView: View {
                     }
                     #endif
                 }
-
-                #if os(iOS)
-                Section {
-                    SignatureButton { showingAbout = true }
-                        .frame(maxWidth: .infinity)
-                        .listRowBackground(Color.clear)
-                }
-                #endif
             }
-            #if os(macOS)
             // Pinned to the bottom, however few cookbooks there are
             .safeAreaInset(edge: .bottom) {
                 SignatureButton { showingAbout = true }
+                    .frame(maxWidth: .infinity)
                     .padding(.bottom, 4)
             }
+            #if os(macOS)
             .frame(minWidth: 400, idealWidth: 440, minHeight: 300, idealHeight: 360)
             #endif
             .navigationTitle("Cookbooks")
