@@ -560,22 +560,83 @@ nonisolated enum CookPlanner {
 
     /// Cooking times like "about 20 minutes" or "5 to 10 minutes".
     static func durations(in text: String) -> [CookDuration] {
+        // "20 to 25 minutes", "1 1/2 hours", "about 1½ hours"; never the "2
+        // hours" inside "1/2 hours"
+        let number = #"(\d+(?:\.\d+)?(?:\s+\d/\d|\s*[½¼¾⅓⅔])?|\d/\d|[½¼¾⅓⅔])"#
         let regex = try! NSRegularExpression(
-            pattern: #"\b(?:(?:about|around|roughly)\s+)?(\d+(?:\.\d+)?)(?:\s*(?:to|-|–|or)\s*(\d+(?:\.\d+)?))?\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?)\b"#,
+            pattern: #"(?<![\w/.])(?:(?:about|around|roughly)\s+)?"# + number + #"(?:\s*(?:to|-|–|or)\s*"# + number
+                + #")?(?:\s+(?:more|additional|longer))?\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?)\b"#,
+            options: [.caseInsensitive]
+        )
+        // "a minute or two", "an hour", "half an hour"
+        let words = try! NSRegularExpression(
+            pattern: #"(?<![\w])(?:(?:about|around|roughly)\s+)?(?:(half)\s+an\s+hour|an?\s+(minute|hour)(?:\s+or\s+(two))?)\b"#,
             options: [.caseInsensitive]
         )
         let ns = text as NSString
-        return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap { match in
+        let all = NSRange(location: 0, length: ns.length)
+        let numbered: [CookDuration] = regex.matches(in: text, range: all).compactMap { match in
             guard let range = Range(match.range, in: text),
-                  let low = Double(ns.substring(with: match.range(at: 1))) else { return nil }
-            let high = match.range(at: 2).location == NSNotFound ? nil : ns.substring(with: match.range(at: 2))
+                  let low = amount(ns.substring(with: match.range(at: 1))) else { return nil }
+            let high = match.range(at: 2).location == NSNotFound ? nil : amount(ns.substring(with: match.range(at: 2)))
             let unit = ns.substring(with: match.range(at: 3)).lowercased()
             let (short, multiplier): (String, Double) = unit.hasPrefix("h") ? ("hr", 3600) : unit.hasPrefix("s") ? ("sec", 1) : ("min", 60)
-            let lowText = ns.substring(with: match.range(at: 1))
-            let label = high.map { "\(lowText)–\($0) \(short)" } ?? "\(lowText) \(short)"
-            let upper = high.flatMap(Double.init).map { Int($0 * multiplier) }
-            return CookDuration(range: range, label: label, seconds: Int(low * multiplier), upperSeconds: upper)
+            let label = high.map { "\(amountLabel(low))–\(amountLabel($0)) \(short)" } ?? "\(amountLabel(low)) \(short)"
+            return CookDuration(range: range, label: label, seconds: Int(low * multiplier), upperSeconds: high.map { Int($0 * multiplier) })
         }
+        let worded: [CookDuration] = words.matches(in: text, range: all).compactMap { match in
+            guard let range = Range(match.range, in: text) else { return nil }
+            if match.range(at: 1).location != NSNotFound {
+                return CookDuration(range: range, label: "30 min", seconds: 1800)
+            }
+            let hour = ns.substring(with: match.range(at: 2)).lowercased() == "hour"
+            let (short, multiplier) = hour ? ("hr", 3600) : ("min", 60)
+            if match.range(at: 3).location != NSNotFound {
+                return CookDuration(range: range, label: "1–2 \(short)", seconds: multiplier, upperSeconds: 2 * multiplier)
+            }
+            return CookDuration(range: range, label: "1 \(short)", seconds: multiplier)
+        }
+        return (numbered + worded.filter { word in !numbered.contains { $0.range.overlaps(word.range) } })
+            .sorted { $0.range.lowerBound < $1.range.lowerBound }
+    }
+
+    /// "1 1/2" → 1.5, "½" → 0.5, "2.5" → 2.5
+    private static func amount(_ text: String) -> Double? {
+        let fractions: [Character: Double] = ["½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1.0 / 3, "⅔": 2.0 / 3]
+        var rest = text.trimmingCharacters(in: .whitespaces)
+        var total = 0.0
+        if let last = rest.last, let fraction = fractions[last] {
+            total += fraction
+            rest = String(rest.dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+        for part in rest.split(separator: " ") {
+            let pieces = part.split(separator: "/")
+            if pieces.count == 2, let top = Double(pieces[0]), let bottom = Double(pieces[1]), bottom > 0 {
+                total += top / bottom
+            } else if let value = Double(part) {
+                total += value
+            } else {
+                return nil
+            }
+        }
+        return total
+    }
+
+    /// 1.5 → "1½", 0.5 → "½", 2.5 → "2½", 20 → "20"
+    private static func amountLabel(_ value: Double) -> String {
+        let whole = Int(value)
+        let fraction = value - Double(whole)
+        let symbol: String? = switch fraction {
+        case 0.24...0.26: "¼"
+        case 0.32...0.34: "⅓"
+        case 0.49...0.51: "½"
+        case 0.65...0.67: "⅔"
+        case 0.74...0.76: "¾"
+        default: nil
+        }
+        if fraction < 0.01 { return "\(whole)" }
+        guard let symbol else { return String(format: "%g", value) }
+        return whole == 0 ? symbol : "\(whole)\(symbol)"
     }
 
     /// "step 6" mentions, with the sentence they're in.

@@ -245,7 +245,9 @@ struct CookOverviewTimeline: View {
                     }
                 }
             }
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: isLandscape ? .leading : .topLeading)
+            // The frames are already placed (and centered in landscape), so
+            // pin the origin rather than centering a second time
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
         .padding(.vertical, isLandscape ? 0 : 8)
         .accessibilityElement(children: .contain)

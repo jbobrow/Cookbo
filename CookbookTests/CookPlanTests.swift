@@ -152,6 +152,23 @@ final class CookPlanTests: XCTestCase {
         XCTAssertTrue(CookPlanner.durations(in: "Add 3 cups of water.").isEmpty)
     }
 
+    func testDurationsWithFractionsAndWords() {
+        let osso = CookPlanner.durations(in: "Cook until the meat is tender, about 1 to 1 1/2 hours.")
+        XCTAssertEqual(osso.count, 1, "never the 2 hours inside 1/2 hours")
+        XCTAssertEqual(osso.first?.seconds, 3600)
+        XCTAssertEqual(osso.first?.upperSeconds, 5400)
+        XCTAssertEqual(osso.first?.label, "1–1½ hr")
+        XCTAssertEqual(CookPlanner.durations(in: "Rest for 1½ hours.").first?.seconds, 5400)
+        let burner = CookPlanner.durations(in: "Set the dish on the burner for a minute or two.")
+        XCTAssertEqual(burner.first?.seconds, 60)
+        XCTAssertEqual(burner.first?.upperSeconds, 120)
+        XCTAssertEqual(CookPlanner.durations(in: "Refrigerate for at least an hour.").first?.seconds, 3600)
+        XCTAssertEqual(CookPlanner.durations(in: "Chill for half an hour.").first?.seconds, 1800)
+        let more = CookPlanner.durations(in: "Continue cooking for about 10 to 15 more minutes.")
+        XCTAssertEqual(more.first?.label, "10–15 min")
+        XCTAssertEqual(CookPlanner.durations(in: "Bake for 20 minutes, then broil a minute.").count, 2)
+    }
+
     // MARK: - Checking the model's rewrite
 
     func testNumbersTreatFractionGlyphsAsTheSame() {

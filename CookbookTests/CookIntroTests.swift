@@ -75,6 +75,49 @@ final class CookIntroTests: XCTestCase {
         prepDuration: 15 * 60
     )
 
+    /// Julia Child's Berry Clafoutis: "Heat oven", a minute on the burner,
+    /// then a long bake.
+    private let clafoutis = Recipe(
+        ingredients: [
+            Ingredient(text: "1 1/4 cups milk"),
+            Ingredient(text: "2/3 cup granulated sugar, divided"),
+            Ingredient(text: "3 eggs"),
+            Ingredient(text: "1 tablespoon vanilla extract"),
+            Ingredient(text: "1/8 teaspoon salt"),
+            Ingredient(text: "1/2 cup flour"),
+            Ingredient(text: "2 cups berries"),
+            Ingredient(text: "Powdered sugar")
+        ],
+        directions: [
+            Direction(text: "Heat oven to 350 degrees. Lightly butter a medium-size flameproof baking dish at least 1 1/2 inches deep.", order: 1),
+            Direction(text: "Place the milk, 1/3 cup granulated sugar, eggs, vanilla, salt and flour in a blender. Blend at top speed until smooth and frothy, about 1 minute.", order: 2),
+            Direction(text: "Pour a 1/4-inch layer of batter in the baking dish. Turn on a stove burner to low and set dish on top for a minute or two, until a film of batter has set in the bottom of the dish. Remove from heat.", order: 3),
+            Direction(text: "Spread berries over the batter and sprinkle on the remaining 1/3 cup granulated sugar. Pour on the rest of the batter and smooth with the back of a spoon. Place in the center of the oven and bake about 50 minutes, until top is puffed and browned and a tester plunged into its center comes out clean.", order: 4),
+            Direction(text: "Sprinkle with powdered sugar just before serving. (Clafoutis need not be served hot, but should still be warm. It will sink slightly as it cools.)", order: 5)
+        ]
+    )
+
+    /// Shakshuka: a handful of stovetop steps that are all one Cook.
+    private let shakshuka = Recipe(
+        ingredients: [
+            Ingredient(text: "2 tablespoons olive oil"),
+            Ingredient(text: "1 medium onion (diced)"),
+            Ingredient(text: "1 red bell pepper (seeded and diced)"),
+            Ingredient(text: "4 garlic cloves (finely chopped)"),
+            Ingredient(text: "1 (28-ounce can) whole peeled tomatoes"),
+            Ingredient(text: "6 large eggs"),
+            Ingredient(text: "1 small bunch fresh cilantro (chopped)")
+        ],
+        directions: [
+            Direction(text: "Heat olive oil in a large sauté pan on medium heat. Add the chopped bell pepper and onion and cook for 5 minutes or until the onion becomes translucent.", order: 1),
+            Direction(text: "Add garlic and spices and cook an additional minute.", order: 2),
+            Direction(text: "Pour the can of tomatoes and juice into the pan and break down the tomatoes using a large spoon. Season with salt and pepper and bring the sauce to a simmer.", order: 3),
+            Direction(text: "Use your large spoon to make small wells in the sauce and crack the eggs into each well. Cook the eggs for 5 to 8 minutes, or until the eggs are done to your liking.", order: 4),
+            Direction(text: "Garnish with chopped cilantro and parsley before serving.", order: 5)
+        ],
+        prepDuration: 10 * 60
+    )
+
     /// Chicken, Vegetable and Barley Soup: the cutting is in the steps.
     private let barleySoup = Recipe(
         ingredients: [
@@ -110,7 +153,8 @@ final class CookIntroTests: XCTestCase {
         // The model put most of these side by side; none of them says so
         let hints = (1...4).map { OverviewHint(word: "Simmer", minutes: 0, alongsideStep: $0 > 1 ? $0 - 1 : 0) }
         let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup), hints: hints)
-        XCTAssertTrue(overview.blocks.filter { $0.step != nil }.allSatisfy { $0.lane == 0 })
+        let steps = overview.blocks.filter { $0.step != nil && CookStage(rawValue: $0.word)?.isHeadStart != true }
+        XCTAssertTrue(steps.allSatisfy { $0.lane == 0 })
     }
 
     func testOverview_modelEstimatesDontReplaceTheRecipesTimes() {
@@ -120,17 +164,21 @@ final class CookIntroTests: XCTestCase {
         XCTAssertEqual(overview.blocks.first { $0.step == 1 }?.timeLabel, "~4 min", "a step with no time takes the estimate")
     }
 
-    func testOverview_modelWordsMustComeFromTheStep() {
-        let hints = [
-            OverviewHint(word: "Boil", minutes: 0, alongsideStep: 0),
-            OverviewHint(word: "Add", minutes: 0, alongsideStep: 0),
-            OverviewHint(word: "Cut", minutes: 0, alongsideStep: 0),
-            OverviewHint(word: "Add", minutes: 0, alongsideStep: 0)
-        ]
+    func testOverview_theStepsOwnWordsBeatTheModel() {
+        let hints = ["Serve", "Bake", "Bake", "Bake"].map { OverviewHint(word: $0, minutes: 0, alongsideStep: 0) }
         let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup), hints: hints)
-        XCTAssertEqual(overview.blocks.first { $0.step == 0 }?.word, "Boil")
-        XCTAssertNotEqual(overview.blocks.first { $0.step == 2 }?.word, "Cut", "step 3 cuts nothing")
-        XCTAssertEqual(overview.blocks.first { $0.step == 3 }?.word, "Simmer", "step 4 never says add")
+        XCTAssertEqual(overview.blocks.filter { $0.lane == 0 }.map(\.word), ["Prep", "Simmer"],
+                       "the cutting in step 1 is prep, and the rest simmers in the pot")
+    }
+
+    func testOverview_waterBoilsBeforeTheStepThatNeedsIt() {
+        let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup))
+        let boil = overview.blocks.first { $0.word == "Boil" }
+        let simmer = overview.blocks.first { $0.word == "Simmer" }
+        XCTAssertEqual(boil?.kind, .alongside)
+        XCTAssertNotNil(simmer)
+        XCTAssertEqual(boil?.end ?? 0, simmer?.start ?? -1, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(simmer?.start ?? 0, 5, "10 minutes for the water, 5 of them during prep")
     }
 
     func testOverview_modelCantNameAStepPrep() {
@@ -194,7 +242,8 @@ final class CookIntroTests: XCTestCase {
         XCTAssertEqual(sauce.kind, .alongside)
         XCTAssertNotEqual(preheat.lane, 0)
         XCTAssertNotEqual(sauce.lane, 0)
-        XCTAssertEqual(preheat.start, -30, "the oven goes on at the start of prep")
+        let bake = overview.blocks.first { $0.word == "Bake" }!
+        XCTAssertEqual(preheat.end, bake.start, accuracy: 0.001, "the oven is hot just as the bake starts, not an hour early")
         XCTAssertFalse(overview.blocks.contains { $0.step == 0 && $0.kind == .cook }, "a preheat-only step has no other block")
     }
 
@@ -223,37 +272,93 @@ final class CookIntroTests: XCTestCase {
         XCTAssertEqual(drain.start, caramelize.start)
     }
 
-    func testOverview_hintsReplaceWordsButOnlyGoodOnes() {
-        let plan = CookPlanner.heuristicPlan(for: soup)
+    func testOverview_theModelOnlyNamesStepsTheTextDoesnt() {
+        let recipe = Recipe(directions: [
+            Direction(text: "Heat the oil in a pan and cook the onions for 5 minutes.", order: 1),
+            Direction(text: "Pour everything into the dish and let it go.", order: 2)
+        ])
         let hints = [
-            OverviewHint(word: "Caramelize", minutes: 0, alongsideStep: 0),
-            OverviewHint(word: "drain the tomatoes", minutes: 0, alongsideStep: 1),
-            OverviewHint(word: "Combine", minutes: 2, alongsideStep: 0)
+            OverviewHint(word: "Serve", minutes: 0, alongsideStep: 0),
+            OverviewHint(word: "Bake", minutes: 25, alongsideStep: 0)
         ]
-        let overview = CookIntroPlanner.overview(for: soup, plan: plan, hints: hints)
-        XCTAssertEqual(overview.blocks.first { $0.step == 0 }?.word, "Caramelize")
-        XCTAssertEqual(overview.blocks.first { $0.step == 1 }?.word, "Add", "more than one word falls back to the text")
-        XCTAssertEqual(overview.blocks.first { $0.step == 2 }?.timeLabel, "~2 min")
+        let overview = CookIntroPlanner.overview(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe), hints: hints)
+        XCTAssertEqual(overview.blocks.first { $0.step == 0 }?.word, "Cook", "the step says cook")
+        XCTAssertEqual(overview.blocks.first { $0.step == 1 }?.word, "Bake", "this one names nothing")
+        XCTAssertEqual(overview.blocks.first { $0.step == 1 }?.timeLabel, "~25 min")
     }
 
-    func testWords() {
-        XCTAssertEqual(CookIntroPlanner.word(for: lasagna.directions[0].text), "Preheat")
-        XCTAssertEqual(CookIntroPlanner.word(for: lasagna.directions[1].text), "Cook", "the main cooking action wins over the first verb")
-        XCTAssertEqual(CookIntroPlanner.word(for: lasagna.directions[6].text), "Bake")
+    func testOverview_theModelCantUseWordsOutsideTheStages() {
+        let recipe = Recipe(directions: [
+            Direction(text: "Heat the oil in a pan and cook the onions for 5 minutes.", order: 1),
+            Direction(text: "Pour everything into the dish and let it go.", order: 2)
+        ])
+        let hints = [OverviewHint(word: "", minutes: 0, alongsideStep: 0), OverviewHint(word: "Pour", minutes: 0, alongsideStep: 0)]
+        let overview = CookIntroPlanner.overview(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe), hints: hints)
+        XCTAssertEqual(overview.blocks.filter { $0.lane == 0 }.map(\.word), ["Cook"], "a step that names nothing goes with the one before")
     }
 
-    func testOverview_backToBackStepsWithTheSameWordAreOneBlock() {
-        let plan = CookPlanner.heuristicPlan(for: soup)
-        // Steps 1 and 3 both add things to the pot
-        let hints = [
-            OverviewHint(word: "Add", minutes: 0, alongsideStep: 0),
-            OverviewHint(word: "Drain", minutes: 0, alongsideStep: 1),
-            OverviewHint(word: "Add", minutes: 2, alongsideStep: 0)
-        ]
-        let overview = CookIntroPlanner.overview(for: soup, plan: plan, hints: hints)
+    func testStages() {
+        XCTAssertEqual(CookIntroPlanner.stage(for: lasagna.directions[1].text), .cook)
+        XCTAssertEqual(CookIntroPlanner.stage(for: lasagna.directions[6].text), .bake)
+        XCTAssertEqual(CookIntroPlanner.stage(for: lasagna.directions[4].text), .mix)
+        XCTAssertEqual(CookIntroPlanner.stage(for: lasagna.directions[5].text), .assemble, "layering")
+        XCTAssertEqual(CookIntroPlanner.stage(for: clafoutis.directions[3].text), .bake, "the batter is poured, but the 50 minutes are in the oven")
+        XCTAssertEqual(CookIntroPlanner.stage(for: clafoutis.directions[4].text), .serve, "\"as it cools\" is an aside")
+        XCTAssertEqual(CookIntroPlanner.stage(for: shakshuka.directions[2].text), .cook, "bringing it to a simmer isn't simmering yet")
+        XCTAssertEqual(CookIntroPlanner.stage(for: "Stir occasionally, until softened and lightly browned, about 10 minutes."), .cook)
+        let cutting = CookIntroPlanner.withoutSentences(barleySoup.directions[0].text, where: CookIntroPlanner.isWaterBoiling)
+        XCTAssertEqual(CookIntroPlanner.stage(for: cutting), .prep, "cut, dice, peel and cut beat one roll")
+        XCTAssertEqual(CookIntroPlanner.stage(for: "Drain the pasta, then allow to cool slightly. Add the vegetables and stir to combine."), .mix,
+                       "an untimed cool doesn't outweigh the stirring")
+        XCTAssertEqual(CookIntroPlanner.stage(for: "Brown the chicken for 4 to 5 minutes per side. Let the pan cool for 5 minutes."), .cook)
+        XCTAssertEqual(CookIntroPlanner.stage(for: "Cook the chickpeas: Stir the shallot until it starts to turn color, 2 to 3 minutes."), .cook, "the heading says so")
+        XCTAssertEqual(CookIntroPlanner.stage(for: "Mix the brown sugar into the batter."), .mix, "brown sugar isn't browning")
+        XCTAssertNil(CookIntroPlanner.stage(for: "Golden, crusty, and works every time."))
+    }
+
+    func testOverview_clafoutisIsPreheatMixBakeServe() {
+        let overview = CookIntroPlanner.overview(for: clafoutis, plan: CookPlanner.heuristicPlan(for: clafoutis))
+        XCTAssertEqual(overview.blocks.filter { $0.lane == 0 }.map(\.word), ["Prep", "Mix", "Bake", "Serve"],
+                       "buttering the dish is prep, and the minute or two on the burner goes with the mixing")
+        let preheat = overview.blocks.first { $0.word == "Preheat" }
+        let bake = overview.blocks.first { $0.word == "Bake" }
+        XCTAssertEqual(preheat?.kind, .alongside, "\"Heat oven to 350\" is a preheat")
+        XCTAssertEqual(preheat?.end ?? 0, bake?.start ?? -1, accuracy: 0.001, "the bake waits for the oven")
+        XCTAssertEqual(bake?.timeLabel, "50 min")
+    }
+
+    func testOverview_shakshukaIsCookThenServe() {
+        let overview = CookIntroPlanner.overview(for: shakshuka, plan: CookPlanner.heuristicPlan(for: shakshuka))
+        XCTAssertEqual(overview.blocks.map(\.word), ["Prep", "Cook", "Serve"])
+        XCTAssertEqual(overview.laneCount, 1)
+    }
+
+    func testOverview_notesAreNotSteps() {
+        let recipe = Recipe(directions: [
+            Direction(text: "Simmer the soup for 20 minutes.", order: 1),
+            Direction(text: "Ladle into bowls and serve.", order: 2),
+            Direction(text: "Make Ahead: The soup can be refrigerated for 5 days.", order: 3)
+        ])
+        let overview = CookIntroPlanner.overview(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe))
+        XCTAssertEqual(overview.blocks.map(\.word), ["Simmer", "Serve"])
+    }
+
+    func testOverview_meltingAheadIsAHeadStart() {
+        let recipe = Recipe(directions: [
+            Direction(text: "Melt the butter in the microwave. Cool for about 5 minutes before using.", order: 1),
+            Direction(text: "Whisk the flour, eggs, milk and melted butter until smooth.", order: 2),
+            Direction(text: "Cook the crepes in a hot skillet for 1 to 2 minutes per side.", order: 3)
+        ])
+        let overview = CookIntroPlanner.overview(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe))
+        XCTAssertEqual(overview.blocks.first { $0.word == "Melt" }?.kind, .alongside)
+        XCTAssertEqual(overview.blocks.filter { $0.lane == 0 }.map(\.word), ["Mix", "Cook"])
+    }
+
+    func testOverview_backToBackStepsInTheSameStageAreOneBlock() {
+        let overview = CookIntroPlanner.overview(for: soup, plan: CookPlanner.heuristicPlan(for: soup))
         let main = overview.blocks.filter { $0.kind == .cook }
-        XCTAssertEqual(main.map(\.word), ["Add"], "the drain alongside doesn't split them")
-        XCTAssertEqual(main.first?.timeLabel, "~25 min")
+        XCTAssertEqual(main.map(\.word), ["Cook"], "the drain alongside doesn't split them")
+        XCTAssertTrue(main.first?.timeLabel.hasPrefix("~") ?? false)
     }
 
     func testLayoutSqueezesWhenThereAreTooManyBlocks() {

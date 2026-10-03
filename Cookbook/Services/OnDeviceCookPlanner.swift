@@ -100,7 +100,7 @@ extension OnDeviceCookPlanner {
             \(directions)
 
             For each of the \(steps.count) steps, in order, give:
-            - one word for its main action, like Sauté, Bake, Layer, Rest, Simmer or Whisk; give back-to-back steps that are one action the same word, like Layer for each layer of a lasagna
+            - its stage: Prep (cutting, greasing a pan), Mix (stirring, whisking, blending, a batter or dough), Assemble (layering, filling, shaping), Cook (on the stove: sauté, fry, sear, heat), Simmer (hands-off on the stove: simmer, braise, boil), Bake (in the oven: bake, roast, broil), Grill, Rest (cool, rise, marinate), Chill (fridge or freezer) or Serve (garnish, plate, serve)
             - how many minutes it takes if the step doesn't say, as your best estimate; 0 if the step gives a time
             - the number of an earlier step it happens at the same time as, like a sauce made meanwhile or an oven preheating; 0 if none
             """
@@ -137,7 +137,7 @@ nonisolated struct GeneratedOverviewStep {
     @Guide(description: "The step's number.")
     var stepNumber: Int
 
-    @Guide(description: "One word for the step's main action, such as Sauté or Bake.")
+    @Guide(description: "The stage this step belongs to.", .anyOf(["Prep", "Mix", "Assemble", "Cook", "Simmer", "Bake", "Grill", "Rest", "Chill", "Serve"]))
     var word: String
 
     @Guide(description: "Estimated minutes if the step gives no time, otherwise 0.")

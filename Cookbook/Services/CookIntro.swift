@@ -53,9 +53,40 @@ nonisolated struct PrepTask: Equatable {
     var ingredientIndices: [Int]
 }
 
+/// The stages every overview is told in. A small, fixed set, so every recipe
+/// reads the same way: the oven heating while you prep, then Mix, Bake, Serve.
+nonisolated enum CookStage: String, CaseIterable, Codable {
+    /// The oven or grill heating up
+    case preheat = "Preheat"
+    /// A pot of water coming to the boil
+    case boil = "Boil"
+    /// Butter or chocolate melted ahead of time
+    case melt = "Melt"
+    case prep = "Prep"
+    case mix = "Mix"
+    /// Putting it together: layering, filling, shaping
+    case assemble = "Assemble"
+    /// On the stove: sauté, fry, sear, brown, heat through
+    case cook = "Cook"
+    /// Hands-off on the stove: simmer, braise, poach, boil
+    case simmer = "Simmer"
+    /// In the oven: bake, roast, broil
+    case bake = "Bake"
+    case grill = "Grill"
+    /// Waiting: rest, cool, rise, marinate, soak
+    case rest = "Rest"
+    case chill = "Chill"
+    /// The finish: garnish, top, assemble, serve
+    case serve = "Serve"
+
+    /// Things to start before anything else, so they're ready when needed.
+    var isHeadStart: Bool { self == .preheat || self == .boil || self == .melt }
+}
+
 /// What the on-device model suggested for one step of the overview, checked
 /// before use.
 nonisolated struct OverviewHint: Codable, Equatable {
+    /// One of the stage names
     var word: String
     /// Its estimate when the step gives no time; 0 when it doesn't know
     var minutes: Int
@@ -71,92 +102,181 @@ nonisolated enum CookIntroPlanner {
 
     static func overview(for recipe: Recipe, plan: CookPlan, hints: [OverviewHint]? = nil) -> CookOverview {
         let texts = recipe.orderedDirections.map { $0.text.sanitizedForDisplay }
+        let declaredPrep = recipe.prepDuration > 0 ? recipe.prepDuration / 60 : 0
+
+        struct Step {
+            var index: Int
+            var stage: CookStage
+            var timing: (low: Double, high: Double, label: String, estimated: Bool)
+            var alongside: Bool
+            var waitsForWater = false
+            var servesHere = false
+            var length: Double { (timing.low + timing.high) / 2 }
+        }
+        var headStarts: [(stage: CookStage, step: Int, minutes: Double)] = []
+        var steps: [Step] = []
+        var waterComing = false
+
+        for (index, fullText) in texts.enumerated() where !isNote(fullText) {
+            let hint = hints.flatMap { $0.indices.contains(index) ? $0[index] : nil }
+            let alongside = runsAlongside(fullText)
+
+            // The oven and the pasta water go on early, so they heat while you
+            // work; the rest of the step carries on as its own block
+            var text = fullText
+            if isPreheat(text) {
+                if !headStarts.contains(where: { $0.stage == .preheat }) {
+                    headStarts.append((.preheat, index, 15))
+                }
+                text = withoutSentences(text, where: isPreheat)
+            }
+            if !alongside, isWaterBoiling(text) {
+                headStarts.append((.boil, index, 10))
+                text = withoutSentences(text, where: isWaterBoiling)
+                waterComing = true
+            }
+            if isMeltingAhead(text) {
+                headStarts.append((.melt, index, 3))
+                continue
+            }
+            text = withoutLeadIns(text)
+            if text.split(whereSeparator: \.isWhitespace).count < 4 { continue }
+
+            // The step's own words decide; the model only names steps they
+            // don't, and a step that names nothing goes with the one before
+            let suggested = hint.flatMap { CookStage(rawValue: $0.word) }.flatMap { $0.isHeadStart ? nil : $0 }
+            let stage = stage(for: text) ?? suggested ?? steps.last(where: { !$0.alongside })?.stage ?? .prep
+
+            var timing = stepTiming(text, stage: stage)
+            // The model only estimates steps that give no time at all
+            if timing.estimated, CookPlanner.durations(in: text).isEmpty,
+               let minutes = hint?.minutes, (1...240).contains(minutes) {
+                timing = (Double(minutes), Double(minutes), "~\(minutes) min", true)
+            }
+            var step = Step(index: index, stage: stage, timing: timing, alongside: alongside,
+                            servesHere: matches(.serve, in: text))
+            if waterComing, !alongside, stage != .prep {
+                step.waitsForWater = true
+                waterComing = false
+            }
+            steps.append(step)
+        }
+
+        // The last step is serving it, if it's a light step that says so or
+        // lays out the plate
+        if let last = steps.lastIndex(where: { !$0.alongside }),
+           steps[last].stage == .assemble || (steps[last].servesHere && [.mix, .prep].contains(steps[last].stage)) {
+            steps[last].stage = .serve
+        }
+
+        // Prep steps before any cooking ("Butter a baking dish") are part of
+        // the prep block
+        var prepMinutes = declaredPrep > 0 ? declaredPrep : Double(prepTasks(for: recipe, plan: plan).count * 4)
+        while let first = steps.first, first.stage == .prep, !first.alongside {
+            if declaredPrep == 0 { prepMinutes += first.length }
+            steps.removeFirst()
+        }
+        prepMinutes = prepMinutes.rounded(.up)
+        let startTime = -prepMinutes
+        let readyAt: [CookStage: Double] = Dictionary(headStarts.map { ($0.stage, startTime + $0.minutes) },
+                                                      uniquingKeysWith: { first, _ in first })
+
         var blocks: [CookOverview.Block] = []
         var clock = 0.0
         var lastMain: CookOverview.Block?
         var mainBlockForStep: [Int: CookOverview.Block] = [:]
-
-        // Prep comes first, as long as there's something to prep
-        let prepMinutes = recipe.prepDuration > 0 ? recipe.prepDuration / 60 : Double(prepTasks(for: recipe, plan: plan).count * 4)
-        var preheated = false
-
-        for (index, fullText) in texts.enumerated() {
-            let hint = hints.flatMap { $0.indices.contains(index) ? $0[index] : nil }
-
-            // The oven goes on first thing, so it heats while you prep. A step
-            // that also does other work ("Preheat the oven… Bake 10 to 14
-            // minutes") carries on as its own block without the preheat.
-            var text = fullText
-            if isPreheat(fullText) {
-                if !preheated {
-                    blocks.append(.init(word: "Preheat", step: index, lane: 1, start: -prepMinutes, end: -prepMinutes + 15,
-                                        timeLabel: "~15 min", kind: .alongside))
-                    preheated = true
-                }
-                text = withoutPreheat(fullText)
-                if text.split(whereSeparator: \.isWhitespace).count < 4 { continue }
-            }
-
-            var timing = stepTiming(text)
-            // The model only estimates steps that give no time at all
-            if CookPlanner.durations(in: text).isEmpty, !isPreheat(text),
-               let minutes = hint?.minutes, (1...240).contains(minutes) {
-                timing = (Double(minutes), Double(minutes), "~\(minutes) min", true)
-            }
-            let length = (timing.low + timing.high) / 2
-            let word = acceptedWord(hint?.word, in: text) ?? word(for: text)
+        var neededAt: [CookStage: Double] = [:]
+        for step in steps {
+            let hint = hints.flatMap { $0.indices.contains(step.index) ? $0[step.index] : nil }
+            let word = step.stage.rawValue
 
             // Side by side only when the step says so ("Meanwhile…", "While
             // the shallots cook…"); the model can say which step it's beside
             var anchor: CookOverview.Block?
-            if runsAlongside(text) {
-                if let hint, hint.alongsideStep >= 1, hint.alongsideStep - 1 < index,
+            if step.alongside {
+                if let hint, hint.alongsideStep >= 1, hint.alongsideStep - 1 < step.index,
                    let named = mainBlockForStep[hint.alongsideStep - 1] {
                     anchor = named
                 } else {
                     anchor = lastMain
                 }
             }
-
             if let anchor {
-                blocks.append(.init(word: word, step: index, lane: 1, start: anchor.start, end: anchor.start + length,
-                                    timeLabel: timing.label, kind: .alongside))
-            } else {
-                let block = CookOverview.Block(word: word, step: index, lane: 0, start: clock, end: clock + length,
-                                               timeLabel: timing.label, kind: .cook)
-                blocks.append(block)
-                mainBlockForStep[index] = block
-                lastMain = block
-                clock += length
+                blocks.append(.init(word: word, step: step.index, lane: 1, start: anchor.start,
+                                    end: anchor.start + step.length, timeLabel: step.timing.label, kind: .alongside))
+                continue
             }
+
+            // Into the oven once it's hot; into the pot once it boils
+            var start = clock
+            if step.stage == .bake || step.stage == .grill, let hot = readyAt[.preheat], neededAt[.preheat] == nil {
+                start = max(start, hot)
+                neededAt[.preheat] = start
+            }
+            if step.waitsForWater, let boiling = readyAt[.boil] {
+                start = max(start, boiling)
+                neededAt[.boil] = start
+            }
+            let block = CookOverview.Block(word: word, step: step.index, lane: 0, start: start, end: start + step.length,
+                                           timeLabel: step.timing.label, kind: step.stage == .prep ? .prep : .cook)
+            blocks.append(block)
+            mainBlockForStep[step.index] = block
+            lastMain = block
+            clock = block.end
+        }
+
+        // Head starts finish just as they're needed: the oven comes on 15
+        // minutes before the bake, not an hour early
+        for start in headStarts {
+            let end = neededAt[start.stage] ?? startTime + start.minutes
+            let from = max(startTime, end - start.minutes)
+            blocks.append(.init(word: start.stage.rawValue, step: start.step, lane: 1, start: from, end: end,
+                                timeLabel: "~\(Int(start.minutes)) min", kind: .alongside))
         }
 
         if prepMinutes > 0 {
-            let label = recipe.prepDuration > 0 ? "\(Int(prepMinutes)) min" : "~\(Int(prepMinutes)) min"
-            blocks.insert(.init(word: "Prep", step: nil, lane: 0, start: -prepMinutes, end: 0, timeLabel: label, kind: .prep), at: 0)
+            let label = declaredPrep > 0 ? "\(Int(prepMinutes)) min" : "~\(Int(prepMinutes)) min"
+            blocks.insert(.init(word: CookStage.prep.rawValue, step: nil, lane: 0, start: startTime, end: 0,
+                                timeLabel: label, kind: .prep), at: 0)
         }
 
         return CookOverview(blocks: assignLanes(mergeRepeats(blocks.sorted { $0.start < $1.start })))
     }
 
-    /// The step without its preheating sentences.
-    static func withoutPreheat(_ text: String) -> String {
-        text.replacingOccurrences(of: #"([.!?])\s+"#, with: "$1\n", options: .regularExpression)
-            .components(separatedBy: "\n")
-            .filter { !isPreheat($0) }
+    /// The step without the sentences that match.
+    static func withoutSentences(_ text: String, where matches: (String) -> Bool) -> String {
+        sentences(of: text)
+            .filter { !matches($0) }
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespaces)
     }
 
-    /// Back-to-back steps with the same word are one action ("Layer" three
-    /// times is layering): one block, with their times added up.
+    static func sentences(of text: String) -> [String] {
+        text.replacingOccurrences(of: #"([.!?;])\s+"#, with: "$1\n", options: .regularExpression)
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
+    /// Back-to-back steps in the same stage are one block (three steps of
+    /// layering are one Assemble), and a quick step joins the one before it
+    /// ("Stir in the garlic, 1 minute" is part of the Cook), so the overview
+    /// stays a handful of bars.
     private static func mergeRepeats(_ blocks: [CookOverview.Block]) -> [CookOverview.Block] {
+        let isMain: (CookOverview.Block) -> Bool = { $0.kind != .alongside && $0.step != nil }
+        let finalStart = blocks.filter(isMain).map(\.start).max()
+        let minor: Set<CookStage> = [.prep, .mix, .assemble, .cook, .simmer, .serve]
+        let waiting: Set<CookStage> = [.rest, .chill]
         var merged: [CookOverview.Block] = []
         for block in blocks {
-            if block.kind == .cook,
-               let last = merged.lastIndex(where: { $0.kind == .cook }),
-               merged[last].word == block.word, merged[last].end == block.start,
-               merged[(last + 1)...].allSatisfy({ $0.kind != .cook }) {
+            let length = block.end - block.start
+            let quick = (length <= 2 || (block.timeLabel.hasPrefix("~") && length <= 3))
+                && block.start != finalStart
+                && CookStage(rawValue: block.word).map(minor.contains) == true
+            if isMain(block),
+               let last = merged.lastIndex(where: isMain),
+               abs(merged[last].end - block.start) < 0.01,
+               merged[last].word == block.word
+                || (quick && CookStage(rawValue: merged[last].word).map(waiting.contains) != true) {
                 let minutes = Int((block.end - merged[last].start).rounded())
                 merged[last].end = block.end
                 merged[last].timeLabel = "~\(minutes) min"
@@ -185,8 +305,8 @@ nonisolated enum CookIntroPlanner {
     }
 
     /// How long a step takes: the recipe's own times when it gives any,
-    /// otherwise an estimate.
-    static func stepTiming(_ text: String) -> (low: Double, high: Double, label: String, estimated: Bool) {
+    /// otherwise an estimate for its stage.
+    static func stepTiming(_ text: String, stage: CookStage? = nil) -> (low: Double, high: Double, label: String, estimated: Bool) {
         let durations = CookPlanner.durations(in: text)
         if durations.count == 1, let only = durations.first {
             let low = Double(only.seconds) / 60
@@ -198,14 +318,57 @@ nonisolated enum CookIntroPlanner {
             let high = Double(durations.reduce(0) { $0 + ($1.upperSeconds ?? $1.seconds) }) / 60
             return (low, high, "~\(Int(((low + high) / 2).rounded())) min", true)
         }
-        if isPreheat(text) { return (15, 15, "~15 min", true) }
+        if text.range(of: #"\bovernight\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            return (480, 480, "Overnight", false)
+        }
+        // "a couple of minutes", "a few more minutes"
+        if text.range(of: #"\ba (couple|few)( of)?( more)? minutes\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            return (3, 3, "~3 min", true)
+        }
+        let typical: Double? = switch stage {
+        case .bake: 20
+        case .grill, .simmer, .rest: 10
+        case .chill: 30
+        default: nil
+        }
         let words = text.split(whereSeparator: \.isWhitespace).count
-        let minutes = Double(min(max(Int((Double(words) / 12).rounded()), 1), 10))
+        let minutes = typical ?? Double(min(max(Int((Double(words) / 12).rounded()), 1), 10))
         return (minutes, minutes, "~\(Int(minutes)) min", true)
     }
 
+    /// "Make Ahead: …", "Leftovers keep…", "Review my tips before beginning."
+    static func isNote(_ text: String) -> Bool {
+        text.range(of: #"^\s*(make[- ]ahead|leftovers?|storage|to store|store\b|notes?\b|tips?\b|review\b|watch\b|to reheat|reheat\b)"#,
+                   options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// The step without its "Meanwhile," "Once the water boils," and "After
+    /// 2 hours," openings, which say when, not what.
+    static func withoutLeadIns(_ text: String) -> String {
+        sentences(of: text)
+            .map { $0.replacingOccurrences(of: #"^\s*(meanwhile|in the meantime|while|once|when|after|as soon as|if)\b[^,.]*,\s*"#,
+                                           with: "", options: [.regularExpression, .caseInsensitive]) }
+            .joined(separator: " ")
+    }
+
+    /// "Preheat the oven to 425°F", "Heat oven to 350 degrees", "Heat a grill"
     static func isPreheat(_ text: String) -> Bool {
-        text.range(of: #"\bpre-?heat"#, options: [.regularExpression, .caseInsensitive]) != nil
+        text.range(of: #"\bpre-?heat\b(?=[^.]{0,40}(oven|grill|broiler|°|degrees|\b\d{3}\b))|\b(heat|set|turn on)\s+(the\s+|your\s+|an?\s+)?(oven|grill|broiler)\b"#,
+                   options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// "Bring a large pot of salted water to a boil"
+    static func isWaterBoiling(_ text: String) -> Bool {
+        text.range(of: #"\bbring\b[^.]{0,40}\bwater\b[^.]{0,20}\bto\s+(a\s+)?(rolling\s+|full\s+)?boil\b"#,
+                   options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// A step that only melts something for later: "Melt the butter and let
+    /// it cool slightly."
+    static func isMeltingAhead(_ text: String) -> Bool {
+        text.range(of: #"^\s*melt\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+            && text.range(of: #"\b(add|adding|stir in|whisk in|cook|sauté|saute|pour)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
+            && text.split(whereSeparator: \.isWhitespace).count <= 35
     }
 
     /// "Meanwhile, …" or "While the shallots cook, …"
@@ -213,53 +376,81 @@ nonisolated enum CookIntroPlanner {
         text.range(of: #"^\s*(meanwhile|in the meantime|while\b)"#, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
-    /// One word for a step: its first cooking verb.
-    static func word(for text: String) -> String {
-        var rest = text.trimmingCharacters(in: .whitespaces)
-        // "To prepare the veggies: …"
-        if let colon = rest.firstIndex(of: ":"), rest.distance(from: rest.startIndex, to: colon) < 60 {
-            rest = String(rest[rest.index(after: colon)...])
+    /// Which stage a step belongs to. The action that takes the longest
+    /// decides ("Pour on the batter… bake about 50 minutes" is Bake); a step
+    /// with no times goes by its strongest action, heat first.
+    static func stage(for text: String) -> CookStage? {
+        var plain = text.replacingOccurrences(of: #"\([^)]*\)"#, with: " ", options: .regularExpression)
+        // Coming up to temperature is cooking, not yet simmering
+        plain = plain.replacingOccurrences(
+            of: #"\b(bring|return)\b[^.]{0,60}?\bto\s+(a\s+)?(gentle\s+|low\s+|rolling\s+|full\s+|bare\s+)?(simmer|boil)\b"#,
+            with: "heat it", options: [.regularExpression, .caseInsensitive])
+        plain = plain.replacingOccurrences(of: ignoredPhrases, with: " ", options: [.regularExpression, .caseInsensitive])
+
+        // A heading names it outright: "Cook the chickpeas: …", "Assemble: …"
+        if let colon = plain.firstIndex(of: ":"), plain.distance(from: plain.startIndex, to: colon) <= 40 {
+            let heading = String(plain[..<colon])
+            if !heading.lowercased().hasPrefix("to "),
+               let named = timedPriority.first(where: { matches($0, in: heading) }) {
+                return named
+            }
         }
-        // "Meanwhile, …", "While the shallots cook, …", "In a large skillet over medium heat, …"
-        rest = rest.replacingOccurrences(
-            of: #"^\s*(meanwhile|in the meantime|while|once|when|after|as soon as|in|on|using|with)\b[^,.]*,\s*"#,
-            with: "", options: [.regularExpression, .caseInsensitive])
-        let words = rest.lowercased()
-            .components(separatedBy: CharacterSet.letters.inverted)
-            .filter { !$0.isEmpty }
-        // The main cooking action wins anywhere in the step ("Wrap the dish
-        // in foil… Bake for 18 minutes" is Bake); otherwise the first verb
-        let pick = words.first(where: { mainActions.contains($0) })
-            ?? words.prefix(10).first(where: { cookingVerbs.contains($0) })
-            ?? words.first ?? "Cook"
-        return pick.prefix(1).uppercased() + pick.dropFirst()
+
+        let parts = sentences(of: withoutLeadIns(plain))
+        var minutes: [CookStage: Int] = [:]
+        for part in parts {
+            var longest = CookPlanner.durations(in: part).map { $0.upperSeconds ?? $0.seconds }.reduce(0, +)
+            if part.range(of: #"\bovernight\b"#, options: [.regularExpression, .caseInsensitive]) != nil { longest += 8 * 3600 }
+            if longest > 0, let stage = timedPriority.first(where: { matches($0, in: part) }) {
+                minutes[stage, default: 0] += longest
+            }
+        }
+        if let most = minutes.values.max() {
+            return timedPriority.first { minutes[$0] == most }
+        }
+        let text = parts.joined(separator: "\n")
+        if let heat = heatStages.first(where: { matches($0, in: text) }) {
+            return heat
+        }
+        let counts = lightStages.map { stage in
+            (stage, (try? NSRegularExpression(pattern: stagePatterns[stage]!, options: .caseInsensitive))?
+                .numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text)) ?? 0)
+        }
+        guard let best = counts.map(\.1).max(), best > 0 else { return nil }
+        return counts.first { $0.1 == best }?.0
     }
 
-    /// The model's word, if it's one word and the step actually uses it
-    /// ("Cut" for a step that simmers the vegetables is made up).
-    private static func acceptedWord(_ word: String?, in text: String) -> String? {
-        guard let word = word?.trimmingCharacters(in: .whitespacesAndNewlines),
-              text.lowercased().contains(String(word.lowercased().prefix(max(3, word.count - 1)))),
-              !word.isEmpty, word.count <= 14,
-              word.allSatisfy({ $0.isLetter || $0 == "-" }),
-              !["prep", "preheat"].contains(word.lowercased()) else { return nil }
-        return word.prefix(1).uppercased() + word.dropFirst()
+    private static func matches(_ stage: CookStage, in text: String) -> Bool {
+        text.range(of: stagePatterns[stage]!, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
-    private static let mainActions: Set<String> = [
-        "preheat", "bake", "roast", "simmer", "boil", "braise", "fry", "sauté", "saute", "grill", "broil",
-        "steam", "poach", "toast", "rest", "chill", "marinate", "cool", "reduce", "caramelize", "sear",
-        "brown", "cook", "knead", "rise", "proof"
+    /// Where a time is given, the stage that takes the most of it ("Bake 50
+    /// minutes" over "a minute or two" on the burner; two sears over a cool).
+    private static let timedPriority: [CookStage] = [.bake, .grill, .simmer, .cook, .chill, .rest, .mix, .serve, .assemble, .prep]
+    /// Otherwise heat comes first (a step that mixes and then bakes is a
+    /// bake)…
+    private static let heatStages: [CookStage] = [.bake, .grill, .simmer, .cook]
+    /// …and then whatever the step does most ("Cut… dice… peel… roll" is
+    /// prep); an untimed "let it cool slightly" doesn't outweigh the stirring.
+    private static let lightStages: [CookStage] = [.serve, .mix, .assemble, .chill, .rest, .prep]
+
+    private static let stagePatterns: [CookStage: String] = [
+        .bake: #"\b(bake|bakes|baking|roast|roasts|roasting|broil|broils|broiling|in(to)?\s+the\s+(hot\s+|preheated\s+)?oven)\b"#,
+        .grill: #"\b(grill|grills|grilling|barbecue)\b"#,
+        .simmer: #"\b(simmer|simmers|simmering|braise|braises|braising|poach|poaches|poaching|blanch|blanches|blanching|boil|boils|boiling)\b"#,
+        .cook: #"\b(cook|cooks|cooking|saut[ée]|saut[ée]s|saut[ée]ing|fry|fries|frying|stir-fry|sear|sears|searing|brown|browns|browning|toast|toasts|toasting|heats|heating|caramelize|caramelizes|caramelizing|wilt|wilts|scramble|melt|melts|melting|microwave|burner|stovetop|stove)\b|\bheat\s+(the|a|an|some|oil|olive|butter|vegetable|canola|your|it|them|until|through|over|in|on)\b|(^|\n)\s*heat\b|\bheated\b|\bwarm\s+(the|a|an|some|it|them|up|through)\b|\buntil\b[^.,]{0,30}\b(golden|browned|translucent|fragrant|crispy|crisp|charred|softened|caramelized|shimmering)\b"#,
+        .chill: #"\b(chill|chills|chilling|refrigerate|refrigerating|freeze|freezing|fridge|freezer)\b"#,
+        .rest: #"\b(rest|rests|resting|cool|cools|cooling|rise|rises|rising|proof|proofs|proofing|stand|stands|sit|sits|marinate|marinates|marinating|soak|soaks|soaking|steep|steeps)\b"#,
+        .mix: #"\b(mix|mixes|mixing|whisk|whisks|whisking|blend|blends|blending|beat|beats|beating|combine|combines|stir|stirs|stirring|fold|folds|folding|knead|kneads|kneading|toss|tosses|tossing|pur[ée]e|pulse|process|emulsify|batter|dough|dressing)\b"#,
+        .serve: #"\b(serve|serves|serving|garnish|garnishes|enjoy|dig in)\b|\b(transfer|divide|ladle|spoon)\b[^.]*\b(bowls|plates|platter)\b"#,
+        .assemble: #"\b(assemble|assembling|layer|layers|layering|spread|spreads|arrange|arranges|fill|fills|roll|rolls|shape|shapes|stuff|stuffs|wrap|wraps|sprinkle|sprinkles|drizzle|drizzles|scatter|build)\b|\btop\s+(with|each|it|them|the)\b"#,
+        .prep: #"\b(chop|chops|dice|dices|slice|slices|mince|cut|cuts|peel|peels|grate|grates|shred|trim|trims|grease|greases|spray|measure|rinse|rinses|wash|halve|zest|season|seasons|prepare|prep|drain|smash|dredge)\b|\b(butter|line|oil|pit|core|juice)\s+(a|the)\b|\bpat\s+(dry|the|it|them)\b"#,
     ]
 
-    private static let cookingVerbs: Set<String> = [
-        "preheat", "heat", "warm", "bring", "boil", "simmer", "sauté", "saute", "cook", "bake", "roast", "broil",
-        "fry", "sear", "brown", "toast", "stir", "add", "mix", "whisk", "combine", "toss", "pour", "drain", "season",
-        "serve", "layer", "spread", "top", "chop", "slice", "dice", "blend", "pulse", "purée", "puree", "knead",
-        "rest", "cool", "chill", "marinate", "wilt", "reduce", "assemble", "coat", "dredge", "pound", "fold",
-        "beat", "melt", "grate", "garnish", "transfer", "cover", "steam", "grill", "poach", "caramelize",
-        "thicken", "strain", "shred", "roll", "shape", "flip", "divide", "plate", "drizzle", "sprinkle"
-    ]
+    /// Words that look like actions but aren't: "baking dish", "brown sugar",
+    /// "the rest of the batter", "reduce the heat".
+    private static let ignoredPhrases = #"\b(brown sugar|brown rice|cooking spray|cooking oil|baking soda|baking powder|frying pan|saut[ée] pan|serving (bowl|dish|plate|platter|spoon)s?|plastic wrap|baking (dish|sheet|pan|tray|paper|stone|tin|mat)|roasting (pan|tray|rack)|grill pan|heat-?proof|heavy cream|stand mixer|(the )?rest of|cool water|cool,? dry|((reduce|lower|raise|increase|adjust)( the)?|turn (the )?(heat )?(down|up|off)|remove from( the)?|off the) heat|(over|on) (low|medium|medium-low|medium-high|high|moderate) heat)\b"#
+
 
     // MARK: Prep
 
