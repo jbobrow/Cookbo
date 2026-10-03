@@ -229,7 +229,7 @@ nonisolated enum CookIntroPlanner {
     }
 
     static func sentences(of text: String) -> [String] {
-        text.replacingOccurrences(of: #"([.!?;])\s+"#, with: "$1\n", options: .regularExpression)
+        text.replacingPattern(#"([.!?;])\s+"#, with: "$1\n")
             .components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
@@ -295,11 +295,11 @@ nonisolated enum CookIntroPlanner {
             let high = Double(durations.reduce(0) { $0 + ($1.upperSeconds ?? $1.seconds) }) / 60
             return (low, high, "~\(Int(((low + high) / 2).rounded())) min", true)
         }
-        if text.range(of: #"\bovernight\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+        if text.hasPattern(#"\bovernight\b"#, caseInsensitive: true) {
             return (480, 480, "Overnight", false)
         }
         // "a couple of minutes", "a few more minutes"
-        if text.range(of: #"\ba (couple|few)( of)?( more)? minutes\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+        if text.hasPattern(#"\ba (couple|few)( of)?( more)? minutes\b"#, caseInsensitive: true) {
             return (3, 3, "~3 min", true)
         }
         let typical: Double? = switch stage {
@@ -315,54 +315,54 @@ nonisolated enum CookIntroPlanner {
 
     /// "Make Ahead: …", "Leftovers keep…", "Review my tips before beginning."
     static func isNote(_ text: String) -> Bool {
-        text.range(of: #"^\s*(make[- ]ahead|leftovers?|storage|to store|store\b|notes?\b|tips?\b|review\b|watch\b|to reheat|reheat\b)"#,
-                   options: [.regularExpression, .caseInsensitive]) != nil
+        text.hasPattern(#"^\s*(make[- ]ahead|leftovers?|storage|to store|store\b|notes?\b|tips?\b|review\b|watch\b|to reheat|reheat\b)"#,
+                        caseInsensitive: true)
     }
 
     /// The step without its "Meanwhile," "Once the water boils," and "After
     /// 2 hours," openings, which say when, not what.
     static func withoutLeadIns(_ text: String) -> String {
         sentences(of: text)
-            .map { $0.replacingOccurrences(of: #"^\s*(meanwhile|in the meantime|while|once|when|after|as soon as|if)\b[^,.]*,\s*"#,
-                                           with: "", options: [.regularExpression, .caseInsensitive]) }
+            .map { $0.replacingPattern(#"^\s*(meanwhile|in the meantime|while|once|when|after|as soon as|if)\b[^,.]*,\s*"#,
+                                       with: "", caseInsensitive: true) }
             .joined(separator: " ")
     }
 
     /// "Preheat the oven to 425°F", "Heat oven to 350 degrees", "Heat a grill"
     static func isPreheat(_ text: String) -> Bool {
-        text.range(of: #"\bpre-?heat\b(?=[^.]{0,40}(oven|grill|broiler|°|degrees|\b\d{3}\b))|\b(heat|set|turn on)\s+(the\s+|your\s+|an?\s+)?(oven|grill|broiler)\b"#,
-                   options: [.regularExpression, .caseInsensitive]) != nil
+        text.hasPattern(#"\bpre-?heat\b(?=[^.]{0,40}(oven|grill|broiler|°|degrees|\b\d{3}\b))|\b(heat|set|turn on)\s+(the\s+|your\s+|an?\s+)?(oven|grill|broiler)\b"#,
+                        caseInsensitive: true)
     }
 
     /// "Bring a large pot of salted water to a boil"
     static func isWaterBoiling(_ text: String) -> Bool {
-        text.range(of: #"\bbring\b[^.]{0,40}\bwater\b[^.]{0,20}\bto\s+(a\s+)?(rolling\s+|full\s+)?boil\b"#,
-                   options: [.regularExpression, .caseInsensitive]) != nil
+        text.hasPattern(#"\bbring\b[^.]{0,40}\bwater\b[^.]{0,20}\bto\s+(a\s+)?(rolling\s+|full\s+)?boil\b"#,
+                        caseInsensitive: true)
     }
 
     /// A step that only melts something for later: "Melt the butter and let
     /// it cool slightly."
     static func isMeltingAhead(_ text: String) -> Bool {
-        text.range(of: #"^\s*melt\b"#, options: [.regularExpression, .caseInsensitive]) != nil
-            && text.range(of: #"\b(add|adding|stir in|whisk in|cook|sauté|saute|pour)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
+        text.hasPattern(#"^\s*melt\b"#, caseInsensitive: true)
+            && text.rangeOfPattern(#"\b(add|adding|stir in|whisk in|cook|sauté|saute|pour)\b"#, caseInsensitive: true) == nil
             && text.split(whereSeparator: \.isWhitespace).count <= 35
     }
 
     /// "Meanwhile, …" or "While the shallots cook, …"
     static func runsAlongside(_ text: String) -> Bool {
-        text.range(of: #"^\s*(meanwhile|in the meantime|while\b)"#, options: [.regularExpression, .caseInsensitive]) != nil
+        text.hasPattern(#"^\s*(meanwhile|in the meantime|while\b)"#, caseInsensitive: true)
     }
 
     /// Which stage a step belongs to. The action that takes the longest
     /// decides ("Pour on the batter… bake about 50 minutes" is Bake); a step
     /// with no times goes by its strongest action, heat first.
     static func stage(for text: String) -> CookStage? {
-        var plain = text.replacingOccurrences(of: #"\([^)]*\)"#, with: " ", options: .regularExpression)
+        var plain = text.replacingPattern(#"\([^)]*\)"#, with: " ")
         // Coming up to temperature is cooking, not yet simmering
-        plain = plain.replacingOccurrences(
-            of: #"\b(bring|return)\b[^.]{0,60}?\bto\s+(a\s+)?(gentle\s+|low\s+|rolling\s+|full\s+|bare\s+)?(simmer|boil)\b"#,
-            with: "heat it", options: [.regularExpression, .caseInsensitive])
-        plain = plain.replacingOccurrences(of: ignoredPhrases, with: " ", options: [.regularExpression, .caseInsensitive])
+        plain = plain.replacingPattern(
+            #"\b(bring|return)\b[^.]{0,60}?\bto\s+(a\s+)?(gentle\s+|low\s+|rolling\s+|full\s+|bare\s+)?(simmer|boil)\b"#,
+            with: "heat it", caseInsensitive: true)
+        plain = plain.replacingPattern(ignoredPhrases, with: " ", caseInsensitive: true)
 
         // A heading names it outright: "Cook the chickpeas: …", "Assemble: …"
         if let colon = plain.firstIndex(of: ":"), plain.distance(from: plain.startIndex, to: colon) <= 40 {
@@ -377,7 +377,7 @@ nonisolated enum CookIntroPlanner {
         var minutes: [CookStage: Int] = [:]
         for part in parts {
             var longest = CookPlanner.durations(in: part).map { $0.upperSeconds ?? $0.seconds }.reduce(0, +)
-            if part.range(of: #"\bovernight\b"#, options: [.regularExpression, .caseInsensitive]) != nil { longest += 8 * 3600 }
+            if part.hasPattern(#"\bovernight\b"#, caseInsensitive: true) { longest += 8 * 3600 }
             if longest > 0, let stage = timedPriority.first(where: { matches($0, in: part) }) {
                 minutes[stage, default: 0] += longest
             }
@@ -390,15 +390,15 @@ nonisolated enum CookIntroPlanner {
             return heat
         }
         let counts = lightStages.map { stage in
-            (stage, (try? NSRegularExpression(pattern: stagePatterns[stage]!, options: .caseInsensitive))?
-                .numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text)) ?? 0)
+            (stage, Patterns.regex(stagePatterns[stage]!, caseInsensitive: true)
+                .numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text)))
         }
         guard let best = counts.map(\.1).max(), best > 0 else { return nil }
         return counts.first { $0.1 == best }?.0
     }
 
     private static func matches(_ stage: CookStage, in text: String) -> Bool {
-        text.range(of: stagePatterns[stage]!, options: [.regularExpression, .caseInsensitive]) != nil
+        text.hasPattern(stagePatterns[stage]!, caseInsensitive: true)
     }
 
     /// Where a time is given, the stage that takes the most of it ("Bake 50
@@ -441,7 +441,7 @@ nonisolated enum CookIntroPlanner {
             let text = ingredient.text.sanitizedForDisplay
             // A can of diced tomatoes is already cut
             guard let verb = knifeVerb(in: text) ?? stepCuts[index],
-                  text.range(of: #"\b(cans?|canned|jars?|jarred|store-bought|pre-\w+)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
+                  text.rangeOfPattern(#"\b(cans?|canned|jars?|jarred|store-bought|pre-\w+)\b"#, caseInsensitive: true) == nil
             else { continue }
             let parsed = CookPlanner.parseIngredient(text)
             let name = cutIngredientName(parsed)
@@ -507,7 +507,7 @@ nonisolated enum CookIntroPlanner {
             for clause in clauses {
                 let lowered = clause.lowercased()
                 guard let verb = stepKnifeWords.first(where: {
-                    lowered.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil
+                    lowered.hasPattern(#"\b"# + $0.0 + #"\b"#)
                 })?.1 else { continue }
                 for match in CookPlanner.ingredientMatches(in: clause, parsed: parsed) where found[match.ingredient] == nil {
                     found[match.ingredient] = verb
@@ -527,7 +527,7 @@ nonisolated enum CookIntroPlanner {
     /// thinly sliced" is a slice; "pressed or minced" is a mince.
     static func knifeVerb(in text: String) -> String? {
         let lowered = text.lowercased()
-        for (word, verb) in knifeWords where lowered.range(of: #"\b"# + word + #"\b"#, options: .regularExpression) != nil {
+        for (word, verb) in knifeWords where lowered.hasPattern(#"\b"# + word + #"\b"#) {
             return verb
         }
         return nil
@@ -545,7 +545,7 @@ nonisolated enum CookIntroPlanner {
     private static func cutIngredientName(_ parsed: CookPlanner.ParsedIngredient) -> String {
         let lowered = parsed.name.lowercased()
         for (word, _) in knifeWords {
-            guard let range = lowered.range(of: #"\b"# + word + #"\b"#, options: .regularExpression) else { continue }
+            guard let range = lowered.rangeOfPattern(#"\b"# + word + #"\b"#) else { continue }
             let offset = lowered.distance(from: lowered.startIndex, to: range.upperBound)
             var after = String(parsed.name.dropFirst(offset))
             if !parsed.note.isEmpty, !after.contains("+") { after += " " + parsed.note }

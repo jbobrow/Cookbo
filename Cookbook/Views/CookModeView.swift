@@ -68,17 +68,15 @@ struct CookModeView: View {
         #endif
     }
 
-    private var overview: CookOverview {
-        CookIntroPlanner.overview(for: recipe, plan: plan)
-    }
+    @State private var introCache = IntroCache()
 
-    private var prepTasks: [PrepTask] {
-        CookIntroPlanner.prepTasks(for: recipe, plan: plan)
-    }
-
-    private var measureTasks: [MeasureTask] {
-        CookIntroPlanner.measureTasks(for: recipe, plan: plan)
-    }
+    /// The overview, prep and measure lists, worked out once for this recipe
+    /// and plan rather than on every redraw (turning the screen redraws
+    /// several times).
+    private var intro: IntroCache.Content { introCache.content(for: recipe, plan: plan) }
+    private var overview: CookOverview { intro.overview }
+    private var prepTasks: [PrepTask] { intro.prepTasks }
+    private var measureTasks: [MeasureTask] { intro.measureTasks }
 
     /// The prep screen shows when there's anything to cut or measure.
     private var hasPrepPage: Bool { !prepTasks.isEmpty || !measureTasks.isEmpty }
@@ -889,5 +887,35 @@ struct TimerPillRenderer: TextRenderer {
                 context.draw(run)
             }
         }
+    }
+}
+
+/// Holds the screens before step 1 between redraws. Checking things off
+/// changes the recipe but not what these are made from, so they're kept
+/// until the steps, ingredients, prep time or plan change.
+private final class IntroCache {
+    struct Content {
+        let overview: CookOverview
+        let prepTasks: [PrepTask]
+        let measureTasks: [MeasureTask]
+    }
+
+    private var key: [String] = []
+    private var plan: CookPlan?
+    private var cached: Content?
+
+    func content(for recipe: Recipe, plan: CookPlan) -> Content {
+        let key = recipe.orderedDirections.map(\.text) + ["--"] + recipe.allIngredients.map(\.text)
+            + ["\(recipe.prepDuration)"]
+        if let cached, key == self.key, plan == self.plan { return cached }
+        let content = Content(
+            overview: CookIntroPlanner.overview(for: recipe, plan: plan),
+            prepTasks: CookIntroPlanner.prepTasks(for: recipe, plan: plan),
+            measureTasks: CookIntroPlanner.measureTasks(for: recipe, plan: plan)
+        )
+        self.key = key
+        self.plan = plan
+        cached = content
+        return content
     }
 }
