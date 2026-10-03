@@ -674,7 +674,7 @@ nonisolated enum CookPlanner {
         "kosher", "sea", "flaky", "packed", "chopped", "minced", "sliced", "diced", "grated",
         "ground", "finely", "coarsely", "thinly", "roughly", "boneless", "skinless", "unsalted",
         "salted", "whole", "dried", "black", "softened", "melted", "ripe", "raw", "peeled",
-        "good", "quality", "good-quality", "plain", "a", "an", "of"
+        "good", "quality", "good-quality", "plain", "a", "an", "of", "piece", "pieces"
     ]
 
     private static let containerWords: Set<String> = [

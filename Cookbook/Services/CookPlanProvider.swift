@@ -12,11 +12,14 @@ final class CookPlanProvider: ObservableObject {
     static let shared = CookPlanProvider()
 
     @Published private(set) var plans: [UUID: CookPlan] = [:]
+    /// Recipes whose overview the on-device model is still working out, so
+    /// cook mode can wait rather than show it changing.
+    @Published private(set) var overviewPending: Set<UUID> = []
     private var keys: [UUID: String] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
     /// Bumping this drops every cached plan, e.g. after changing the prompt.
-    private static let version = 8
+    private static let version = 10
 
     func plan(for recipe: Recipe) -> CookPlan {
         if keys[recipe.id] == Self.key(for: recipe), let plan = plans[recipe.id] {
@@ -32,6 +35,7 @@ final class CookPlanProvider: ObservableObject {
         if keys[recipe.id] == key, plans[recipe.id] != nil { return }
 
         tasks[recipe.id]?.cancel()
+        overviewPending.remove(recipe.id)
         keys[recipe.id] = key
 
         if let cached = loadCached(recipe.id, key: key) {
@@ -65,8 +69,17 @@ final class CookPlanProvider: ObservableObject {
         let stepTexts = recipe.orderedDirections.map { $0.text.sanitizedForDisplay }
         let ingredientTexts = recipe.allIngredients.map(\.text)
 
+        overviewPending.insert(id)
         tasks[id] = Task { [weak self] in
             var plan = base
+            // The overview first: it's what cook mode opens on, and one call
+            if let hints = await OnDeviceCookPlanner.suggestOverview(for: recipe), hints.count == plan.steps.count {
+                plan.overviewHints = hints
+            }
+            guard let self, self.keys[id] == key, !Task.isCancelled else { return }
+            self.plans[id] = plan
+            self.overviewPending.remove(id)
+
             var firstUse: [Int: Int] = [:]
             for index in plan.steps.indices {
                 if Task.isCancelled { return }
@@ -86,14 +99,11 @@ final class CookPlanProvider: ObservableObject {
                         }
                     }
                 }
-                guard let self, self.keys[id] == key, !Task.isCancelled else { return }
+                guard self.keys[id] == key, !Task.isCancelled else { return }
                 self.plans[id] = plan
             }
-            if let hints = await OnDeviceCookPlanner.suggestOverview(for: recipe), hints.count == plan.steps.count {
-                plan.overviewHints = hints
-            }
             plan.source = .onDevice
-            guard let self, self.keys[id] == key else { return }
+            guard self.keys[id] == key else { return }
             self.plans[id] = plan
             self.saveCached(plan, id: id, key: key)
             self.tasks[id] = nil

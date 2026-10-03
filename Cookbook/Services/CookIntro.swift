@@ -76,28 +76,49 @@ nonisolated enum CookIntroPlanner {
         var lastMain: CookOverview.Block?
         var mainBlockForStep: [Int: CookOverview.Block] = [:]
 
-        for (index, text) in texts.enumerated() {
+        // Prep comes first, as long as there's something to prep
+        let prepMinutes = recipe.prepDuration > 0 ? recipe.prepDuration / 60 : Double(prepTasks(for: recipe, plan: plan).count * 4)
+        var preheated = false
+
+        for (index, fullText) in texts.enumerated() {
             let hint = hints.flatMap { $0.indices.contains(index) ? $0[index] : nil }
+
+            // The oven goes on first thing, so it heats while you prep. A step
+            // that also does other work ("Preheat the oven… Bake 10 to 14
+            // minutes") carries on as its own block without the preheat.
+            var text = fullText
+            if isPreheat(fullText) {
+                if !preheated {
+                    blocks.append(.init(word: "Preheat", step: index, lane: 1, start: -prepMinutes, end: -prepMinutes + 15,
+                                        timeLabel: "~15 min", kind: .alongside))
+                    preheated = true
+                }
+                text = withoutPreheat(fullText)
+                if text.split(whereSeparator: \.isWhitespace).count < 4 { continue }
+            }
+
             var timing = stepTiming(text)
-            if timing.estimated, let minutes = hint?.minutes, (1...240).contains(minutes) {
+            // The model only estimates steps that give no time at all
+            if CookPlanner.durations(in: text).isEmpty, !isPreheat(text),
+               let minutes = hint?.minutes, (1...240).contains(minutes) {
                 timing = (Double(minutes), Double(minutes), "~\(minutes) min", true)
             }
             let length = (timing.low + timing.high) / 2
-            let word = acceptedWord(hint?.word) ?? word(for: text)
+            let word = acceptedWord(hint?.word, in: text) ?? word(for: text)
 
-            // Where it happens: alongside something, or next in line
+            // Side by side only when the step says so ("Meanwhile…", "While
+            // the shallots cook…"); the model can say which step it's beside
             var anchor: CookOverview.Block?
-            if let hint, hint.alongsideStep >= 1, hint.alongsideStep - 1 < index {
-                anchor = mainBlockForStep[hint.alongsideStep - 1]
-            } else if hint == nil, runsAlongside(text) {
-                anchor = lastMain
+            if runsAlongside(text) {
+                if let hint, hint.alongsideStep >= 1, hint.alongsideStep - 1 < index,
+                   let named = mainBlockForStep[hint.alongsideStep - 1] {
+                    anchor = named
+                } else {
+                    anchor = lastMain
+                }
             }
 
-            if isPreheat(text) {
-                // The oven heats while the work carries on
-                blocks.append(.init(word: word, step: index, lane: 1, start: clock, end: clock + length,
-                                    timeLabel: timing.label, kind: .alongside))
-            } else if let anchor {
+            if let anchor {
                 blocks.append(.init(word: word, step: index, lane: 1, start: anchor.start, end: anchor.start + length,
                                     timeLabel: timing.label, kind: .alongside))
             } else {
@@ -110,14 +131,21 @@ nonisolated enum CookIntroPlanner {
             }
         }
 
-        // Prep comes first, as long as there's something to prep
-        let prepMinutes = recipe.prepDuration > 0 ? recipe.prepDuration / 60 : Double(prepTasks(for: recipe, plan: plan).count * 4)
         if prepMinutes > 0 {
             let label = recipe.prepDuration > 0 ? "\(Int(prepMinutes)) min" : "~\(Int(prepMinutes)) min"
             blocks.insert(.init(word: "Prep", step: nil, lane: 0, start: -prepMinutes, end: 0, timeLabel: label, kind: .prep), at: 0)
         }
 
-        return CookOverview(blocks: assignLanes(mergeRepeats(blocks)))
+        return CookOverview(blocks: assignLanes(mergeRepeats(blocks.sorted { $0.start < $1.start })))
+    }
+
+    /// The step without its preheating sentences.
+    static func withoutPreheat(_ text: String) -> String {
+        text.replacingOccurrences(of: #"([.!?])\s+"#, with: "$1\n", options: .regularExpression)
+            .components(separatedBy: "\n")
+            .filter { !isPreheat($0) }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
     }
 
     /// Back-to-back steps with the same word are one action ("Layer" three
@@ -207,10 +235,14 @@ nonisolated enum CookIntroPlanner {
         return pick.prefix(1).uppercased() + pick.dropFirst()
     }
 
-    private static func acceptedWord(_ word: String?) -> String? {
+    /// The model's word, if it's one word and the step actually uses it
+    /// ("Cut" for a step that simmers the vegetables is made up).
+    private static func acceptedWord(_ word: String?, in text: String) -> String? {
         guard let word = word?.trimmingCharacters(in: .whitespacesAndNewlines),
+              text.lowercased().contains(String(word.lowercased().prefix(max(3, word.count - 1)))),
               !word.isEmpty, word.count <= 14,
-              word.allSatisfy({ $0.isLetter || $0 == "-" }) else { return nil }
+              word.allSatisfy({ $0.isLetter || $0 == "-" }),
+              !["prep", "preheat"].contains(word.lowercased()) else { return nil }
         return word.prefix(1).uppercased() + word.dropFirst()
     }
 
@@ -236,10 +268,11 @@ nonisolated enum CookIntroPlanner {
     static func prepTasks(for recipe: Recipe, plan: CookPlan) -> [PrepTask] {
         struct Cut { var verb: String; var step: Int; var index: Int; var amount: String; var name: String; var noun: String }
         var cuts: [Cut] = []
+        let stepCuts = cutsInSteps(of: recipe)
         for (index, ingredient) in recipe.allIngredients.enumerated() {
             let text = ingredient.text.sanitizedForDisplay
             // A can of diced tomatoes is already cut
-            guard let verb = knifeVerb(in: text),
+            guard let verb = knifeVerb(in: text) ?? stepCuts[index],
                   text.range(of: #"\b(cans?|canned|jars?|jarred|store-bought|pre-\w+)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
             else { continue }
             let parsed = CookPlanner.parseIngredient(text)
@@ -266,13 +299,40 @@ nonisolated enum CookIntroPlanner {
             } else if group.allSatisfy({ isProduce($0.noun) }) {
                 title = "\(verb) the vegetables"
             } else {
-                title = "\(verb) the \(naturalList(group.map(\.noun)))"
+                title = "\(verb) the \(naturalList(group.map { $0.noun.split(separator: " ").last.map(String.init) ?? $0.noun }))"
             }
             let detail = group.map { [$0.amount, $0.name].filter { !$0.isEmpty }.joined(separator: " ") }
                 .joined(separator: ", ")
             return PrepTask(title: title, detail: detail, ingredientIndices: group.map(\.index))
         }
     }
+
+    /// Cuts the steps ask for instead of the ingredient list ("Cut the onion
+    /// into a ½-inch dice"): the cut and the ingredient have to be in the same
+    /// clause, so "sprinkle the basil, then slice and serve" isn't one.
+    static func cutsInSteps(of recipe: Recipe) -> [Int: String] {
+        let parsed = recipe.allIngredients.map { CookPlanner.parseIngredient($0.text) }
+        var found: [Int: String] = [:]
+        for step in recipe.orderedDirections {
+            let clauses = step.text.sanitizedForDisplay.components(separatedBy: CharacterSet(charactersIn: ".,;:!?"))
+            for clause in clauses {
+                let lowered = clause.lowercased()
+                guard let verb = stepKnifeWords.first(where: {
+                    lowered.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil
+                })?.1 else { continue }
+                for match in CookPlanner.ingredientMatches(in: clause, parsed: parsed) where found[match.ingredient] == nil {
+                    found[match.ingredient] = verb
+                }
+            }
+        }
+        return found
+    }
+
+    private static let stepKnifeWords: [(String, String)] = [
+        ("mince", "Mince"), ("dice", "Dice"), ("chop", "Chop"), ("slice", "Slice"), ("slices", "Slice"),
+        ("cube", "Cube"), ("julienne", "Julienne"), ("grate", "Grate"), ("shred", "Shred"),
+        ("halve", "Halve"), ("cut", "Cut")
+    ]
 
     /// The cut an ingredient line asks for, as an instruction. "halved and
     /// thinly sliced" is a slice; "pressed or minced" is a mince.

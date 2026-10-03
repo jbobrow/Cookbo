@@ -85,6 +85,7 @@ struct CookModeView: View {
                     CookIntroView(
                         page: page,
                         overview: overview,
+                        overviewLoading: plans.overviewPending.contains(recipe.id),
                         prepTasks: prepTasks,
                         prepped: $prepped,
                         accentColor: accentColor,

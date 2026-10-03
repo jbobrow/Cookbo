@@ -58,7 +58,98 @@ final class CookIntroTests: XCTestCase {
         ]
     )
 
+    /// Simple Green Salad: the preheat is in the middle of the roasting step.
+    private let salad = Recipe(
+        ingredients: [
+            Ingredient(text: "2 small heads of soft lettuce, butter lettuce or similar"),
+            Ingredient(text: "1 Persian cucumber, thinly sliced"),
+            Ingredient(text: "¼ cup shaved Parmesan cheese"),
+            Ingredient(text: "1 avocado, thinly sliced"),
+            Ingredient(text: "½ cup raw almonds"),
+            Ingredient(text: "½ tablespoon tamari")
+        ],
+        directions: [
+            Direction(text: "Roast the almonds: Preheat the oven to 350°F and line a baking sheet with parchment paper. Place the almonds on the sheet and toss with tamari. Bake for 10 to 14 minutes or until browned. Remove from the oven and let cool for 5 minutes.", order: 1),
+            Direction(text: "Assemble the salad. In a large bowl toss the lettuce with a few spoonfuls of the lemon vinaigrette. Add the cucumber, parmesan, avocado, and tamari almonds.", order: 2)
+        ],
+        prepDuration: 15 * 60
+    )
+
+    /// Chicken, Vegetable and Barley Soup: the cutting is in the steps.
+    private let barleySoup = Recipe(
+        ingredients: [
+            Ingredient(text: "1 (3- to 6-inch) piece fresh ginger, scrubbed or peeled"),
+            Ingredient(text: "1 small yellow onion"),
+            Ingredient(text: "2 carrots"),
+            Ingredient(text: "4 chicken drumsticks (1 1/2 pounds; see Tips)"),
+            Ingredient(text: "Salt and freshly ground black pepper"),
+            Ingredient(text: "1/2 small napa cabbage"),
+            Ingredient(text: "1/2 cup pearled barley (see Tips)")
+        ],
+        directions: [
+            Direction(text: "Bring 8 cups of water to a boil in a large saucepan. While the water comes to a boil, cut the ginger into 1/2-inch slices and gently smash. Cut the onion into a 1/2-inch dice. Peel the carrots and cut a 1/2-inch chunk at an angle. Roll the carrot a quarter turn and cut another chunk; repeat.", order: 1),
+            Direction(text: "Add the ginger, then the chicken, to the boiling water and cook for 5 minutes over high, skimming and discarding any foam that rises to the surface. While the chicken boils, cut the cabbage in thirds lengthwise, then crosswise into 1-inch-thick ribbons.", order: 2),
+            Direction(text: "Add the onion, carrots and a few pinches of salt to the saucepan. When the water returns to a boil, adjust the heat to maintain a steady simmer and cook until the carrot is bright orange, about 10 minutes.", order: 3),
+            Direction(text: "Stir in the cabbage and barley, adjust the heat to maintain a steady simmer and cook until the barley and vegetables are tender, 10 to 15 minutes more.", order: 4)
+        ],
+        prepDuration: 5 * 60
+    )
+
+    func testOverview_preheatInsideAStepGetsItsOwnBar() {
+        let overview = CookIntroPlanner.overview(for: salad, plan: CookPlanner.heuristicPlan(for: salad))
+        let preheat = overview.blocks.first { $0.word == "Preheat" }
+        XCTAssertNotNil(preheat)
+        XCTAssertEqual(preheat?.kind, .alongside)
+        XCTAssertEqual(preheat?.start, -15, "it heats while you prep")
+        let roast = overview.blocks.first { $0.step == 0 && $0.kind == .cook }
+        XCTAssertEqual(roast?.word, "Bake", "the rest of the step is still there")
+        XCTAssertEqual(roast?.timeLabel, "~17 min", "10 to 14 minutes in the oven, then 5 to cool")
+    }
+
+    func testOverview_stepsInOrderStayInOneLane() {
+        // The model put most of these side by side; none of them says so
+        let hints = (1...4).map { OverviewHint(word: "Simmer", minutes: 0, alongsideStep: $0 > 1 ? $0 - 1 : 0) }
+        let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup), hints: hints)
+        XCTAssertTrue(overview.blocks.filter { $0.step != nil }.allSatisfy { $0.lane == 0 })
+    }
+
+    func testOverview_modelEstimatesDontReplaceTheRecipesTimes() {
+        let hints = [OverviewHint(word: "Roast", minutes: 12, alongsideStep: 0), OverviewHint(word: "Assemble", minutes: 4, alongsideStep: 0)]
+        let overview = CookIntroPlanner.overview(for: salad, plan: CookPlanner.heuristicPlan(for: salad), hints: hints)
+        XCTAssertEqual(overview.blocks.first { $0.step == 0 && $0.kind == .cook }?.timeLabel, "~17 min")
+        XCTAssertEqual(overview.blocks.first { $0.step == 1 }?.timeLabel, "~4 min", "a step with no time takes the estimate")
+    }
+
+    func testOverview_modelWordsMustComeFromTheStep() {
+        let hints = [
+            OverviewHint(word: "Boil", minutes: 0, alongsideStep: 0),
+            OverviewHint(word: "Add", minutes: 0, alongsideStep: 0),
+            OverviewHint(word: "Cut", minutes: 0, alongsideStep: 0),
+            OverviewHint(word: "Add", minutes: 0, alongsideStep: 0)
+        ]
+        let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup), hints: hints)
+        XCTAssertEqual(overview.blocks.first { $0.step == 0 }?.word, "Boil")
+        XCTAssertNotEqual(overview.blocks.first { $0.step == 2 }?.word, "Cut", "step 3 cuts nothing")
+        XCTAssertEqual(overview.blocks.first { $0.step == 3 }?.word, "Simmer", "step 4 never says add")
+    }
+
+    func testOverview_modelCantNameAStepPrep() {
+        let hints = [OverviewHint(word: "Prep", minutes: 0, alongsideStep: 0)] + (2...4).map { _ in OverviewHint(word: "", minutes: 0, alongsideStep: 0) }
+        let overview = CookIntroPlanner.overview(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup), hints: hints)
+        XCTAssertEqual(overview.blocks.filter { $0.word == "Prep" }.count, 1)
+    }
+
     // MARK: - Prep
+
+    func testPrep_cutsWrittenInTheSteps() {
+        let tasks = CookIntroPlanner.prepTasks(for: barleySoup, plan: CookPlanner.heuristicPlan(for: barleySoup))
+        XCTAssertEqual(tasks.map(\.title), ["Slice the ginger", "Dice the yellow onion", "Cut the carrots", "Cut the napa cabbage"])
+    }
+
+    func testPrep_saladSlicesTogether() {
+        let tasks = CookIntroPlanner.prepTasks(for: salad, plan: CookPlanner.heuristicPlan(for: salad))
+        XCTAssertEqual(tasks.map(\.title), ["Slice the cucumber and avocado"])
+    }
 
     func testPrep_groupsTheCutsByWhenTheyreNeeded() {
         let tasks = CookIntroPlanner.prepTasks(for: lasagna, plan: CookPlanner.heuristicPlan(for: lasagna))
@@ -103,8 +194,8 @@ final class CookIntroTests: XCTestCase {
         XCTAssertEqual(sauce.kind, .alongside)
         XCTAssertNotEqual(preheat.lane, 0)
         XCTAssertNotEqual(sauce.lane, 0)
-        XCTAssertNotEqual(preheat.lane, sauce.lane, "they overlap, so they can't share a lane")
-        XCTAssertEqual(overview.laneCount, 3)
+        XCTAssertEqual(preheat.start, -30, "the oven goes on at the start of prep")
+        XCTAssertFalse(overview.blocks.contains { $0.step == 0 && $0.kind == .cook }, "a preheat-only step has no other block")
     }
 
     func testOverview_mainLaneRunsInOrderAfterPrep() {
@@ -153,14 +244,15 @@ final class CookIntroTests: XCTestCase {
 
     func testOverview_backToBackStepsWithTheSameWordAreOneBlock() {
         let plan = CookPlanner.heuristicPlan(for: soup)
+        // Steps 1 and 3 both add things to the pot
         let hints = [
-            OverviewHint(word: "Cook", minutes: 0, alongsideStep: 0),
+            OverviewHint(word: "Add", minutes: 0, alongsideStep: 0),
             OverviewHint(word: "Drain", minutes: 0, alongsideStep: 1),
-            OverviewHint(word: "Cook", minutes: 2, alongsideStep: 0)
+            OverviewHint(word: "Add", minutes: 2, alongsideStep: 0)
         ]
         let overview = CookIntroPlanner.overview(for: soup, plan: plan, hints: hints)
         let main = overview.blocks.filter { $0.kind == .cook }
-        XCTAssertEqual(main.map(\.word), ["Cook"], "the drain alongside doesn't split them")
+        XCTAssertEqual(main.map(\.word), ["Add"], "the drain alongside doesn't split them")
         XCTAssertEqual(main.first?.timeLabel, "~25 min")
     }
 
