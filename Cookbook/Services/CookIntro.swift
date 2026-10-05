@@ -208,11 +208,11 @@ nonisolated enum CookIntroPlanner {
             let end = neededAt[start.stage] ?? startTime + start.minutes
             let from = max(startTime, end - start.minutes)
             blocks.append(.init(word: start.stage.rawValue, step: start.step, lane: 1, start: from, end: end,
-                                timeLabel: "~\(Int(start.minutes)) min", kind: .alongside))
+                                timeLabel: timeLabel(start.minutes, estimated: true), kind: .alongside))
         }
 
         if prepMinutes > 0 {
-            let label = declaredPrep > 0 ? "\(Int(prepMinutes)) min" : "~\(Int(prepMinutes)) min"
+            let label = timeLabel(prepMinutes, estimated: declaredPrep == 0)
             blocks.insert(.init(word: CookStage.prep.rawValue, step: nil, lane: 0, start: startTime, end: 0,
                                 timeLabel: label, kind: .prep), at: 0)
         }
@@ -254,9 +254,8 @@ nonisolated enum CookIntroPlanner {
                abs(merged[last].end - block.start) < 0.01,
                merged[last].word == block.word
                 || (quick && CookStage(rawValue: merged[last].word).map(waiting.contains) != true) {
-                let minutes = Int((block.end - merged[last].start).rounded())
                 merged[last].end = block.end
-                merged[last].timeLabel = "~\(minutes) min"
+                merged[last].timeLabel = timeLabel(block.end - merged[last].start, estimated: true)
             } else {
                 merged.append(block)
             }
@@ -284,16 +283,17 @@ nonisolated enum CookIntroPlanner {
     /// How long a step takes: the recipe's own times when it gives any,
     /// otherwise an estimate for its stage.
     static func stepTiming(_ text: String, stage: CookStage? = nil) -> (low: Double, high: Double, label: String, estimated: Bool) {
-        let durations = CookPlanner.durations(in: text)
+        let durations = timedDurations(in: text)
         if durations.count == 1, let only = durations.first {
             let low = Double(only.seconds) / 60
             let high = Double(only.upperSeconds ?? only.seconds) / 60
-            return (low, high, only.label, false)
+            // Under an hour, the recipe's own words ("2½ min"); longer, in hours and minutes
+            return (low, high, high < 60 ? only.label : timeLabel(low, to: high), false)
         }
         if durations.count > 1 {
             let low = Double(durations.reduce(0) { $0 + $1.seconds }) / 60
             let high = Double(durations.reduce(0) { $0 + ($1.upperSeconds ?? $1.seconds) }) / 60
-            return (low, high, "~\(Int(((low + high) / 2).rounded())) min", true)
+            return (low, high, timeLabel((low + high) / 2, estimated: true), true)
         }
         if text.hasPattern(#"\bovernight\b"#, caseInsensitive: true) {
             return (480, 480, "Overnight", false)
@@ -310,7 +310,45 @@ nonisolated enum CookIntroPlanner {
         }
         let words = text.split(whereSeparator: \.isWhitespace).count
         let minutes = typical ?? Double(min(max(Int((Double(words) / 12).rounded()), 1), 10))
-        return (minutes, minutes, "~\(Int(minutes)) min", true)
+        return (minutes, minutes, timeLabel(minutes, estimated: true), true)
+    }
+
+    /// "45 min", "1 hr", "1 hr 15 min"; a range shares its unit where it can
+    /// ("20–25 min", "6–8 hr"). "~" marks an estimate.
+    static func timeLabel(_ low: Double, to high: Double? = nil, estimated: Bool = false) -> String {
+        func whole(_ minutes: Double) -> Int { max(Int(minutes.rounded()), 1) }
+        func single(_ minutes: Double) -> String {
+            let total = whole(minutes), hours = total / 60, rest = total % 60
+            if hours == 0 { return "\(total) min" }
+            return rest == 0 ? "\(hours) hr" : "\(hours) hr \(rest) min"
+        }
+        let label: String
+        if let high, whole(high) != whole(low) {
+            let (a, b) = (whole(low), whole(high))
+            if b < 60 {
+                label = "\(a)–\(b) min"
+            } else if a % 60 == 0, b % 60 == 0 {
+                label = "\(a / 60)–\(b / 60) hr"
+            } else {
+                label = "\(single(low))–\(single(high))"
+            }
+        } else {
+            label = single(low)
+        }
+        return estimated ? "~" + label : label
+    }
+
+    /// The times a step takes, leaving out the ones offered instead: "on LOW
+    /// for 6-8 hours or HIGH for 3-4 hours" is 6–8 hours, not both.
+    static func timedDurations(in text: String) -> [CookDuration] {
+        let all = CookPlanner.durations(in: text)
+        return all.indices.filter { i in
+            guard i > 0 else { return true }
+            let gap = String(text[all[i - 1].range.upperBound..<all[i].range.lowerBound])
+            let isAlternative = gap.count <= 30 && gap.hasPattern(#"\bor\b"#, caseInsensitive: true)
+                && !gap.hasPattern(#"[.;!?]|\b(until|then)\b"#, caseInsensitive: true)
+            return !isAlternative
+        }.map { all[$0] }
     }
 
     /// "Make Ahead: …", "Leftovers keep…", "Review my tips before beginning."
@@ -323,7 +361,7 @@ nonisolated enum CookIntroPlanner {
     /// 2 hours," openings, which say when, not what.
     static func withoutLeadIns(_ text: String) -> String {
         sentences(of: text)
-            .map { $0.replacingPattern(#"^\s*(meanwhile|in the meantime|while|once|when|after|as soon as|if)\b[^,.]*,\s*"#,
+            .map { $0.replacingPattern(#"^\s*(meanwhile|in the meantime|at the same time|while|once|when|after|as soon as|if)\b[^,.]*,\s*"#,
                                        with: "", caseInsensitive: true) }
             .joined(separator: " ")
     }
@@ -348,9 +386,9 @@ nonisolated enum CookIntroPlanner {
             && text.split(whereSeparator: \.isWhitespace).count <= 35
     }
 
-    /// "Meanwhile, …" or "While the shallots cook, …"
+    /// "Meanwhile, …", "At the same time, …" or "While the shallots cook, …"
     static func runsAlongside(_ text: String) -> Bool {
-        text.hasPattern(#"^\s*(meanwhile|in the meantime|while\b)"#, caseInsensitive: true)
+        text.hasPattern(#"^\s*(meanwhile|in the meantime|at the same time|while\b)"#, caseInsensitive: true)
     }
 
     /// Which stage a step belongs to. The action that takes the longest
@@ -376,7 +414,7 @@ nonisolated enum CookIntroPlanner {
         let parts = sentences(of: withoutLeadIns(plain))
         var minutes: [CookStage: Int] = [:]
         for part in parts {
-            var longest = CookPlanner.durations(in: part).map { $0.upperSeconds ?? $0.seconds }.reduce(0, +)
+            var longest = timedDurations(in: part).map { $0.upperSeconds ?? $0.seconds }.reduce(0, +)
             if part.hasPattern(#"\bovernight\b"#, caseInsensitive: true) { longest += 8 * 3600 }
             if longest > 0, let stage = timedPriority.first(where: { matches($0, in: part) }) {
                 minutes[stage, default: 0] += longest
@@ -412,7 +450,7 @@ nonisolated enum CookIntroPlanner {
     private static let lightStages: [CookStage] = [.serve, .mix, .assemble, .chill, .rest, .prep]
 
     private static let stagePatterns: [CookStage: String] = [
-        .bake: #"\b(bake|bakes|baking|roast|roasts|roasting|broil|broils|broiling|in(to)?\s+the\s+(hot\s+|preheated\s+)?oven)\b"#,
+        .bake: #"\b(bake|bakes|baking|roast|roasts|roasting|broil|broils|broiling|(in|into|to)\s+the\s+(hot\s+|preheated\s+)?oven)\b"#,
         .grill: #"\b(grill|grills|grilling|barbecue)\b"#,
         .simmer: #"\b(simmer|simmers|simmering|braise|braises|braising|poach|poaches|poaching|blanch|blanches|blanching|boil|boils|boiling)\b"#,
         .cook: #"\b(cook|cooks|cooking|saut[ée]|saut[ée]s|saut[ée]ing|fry|fries|frying|stir-fry|sear|sears|searing|brown|browns|browning|toast|toasts|toasting|heats|heating|caramelize|caramelizes|caramelizing|wilt|wilts|scramble|melt|melts|melting|microwave|burner|stovetop|stove)\b|\bheat\s+(the|a|an|some|oil|olive|butter|vegetable|canola|your|it|them|until|through|over|in|on)\b|(^|\n)\s*heat\b|\bheated\b|\bwarm\s+(the|a|an|some|it|them|up|through)\b|\buntil\b[^.,]{0,30}\b(golden|browned|translucent|fragrant|crispy|crisp|charred|softened|caramelized|shimmering)\b"#,
@@ -425,8 +463,8 @@ nonisolated enum CookIntroPlanner {
     ]
 
     /// Words that look like actions but aren't: "baking dish", "brown sugar",
-    /// "the rest of the batter", "reduce the heat".
-    private static let ignoredPhrases = #"\b(brown sugar|brown rice|cooking spray|cooking oil|baking soda|baking powder|frying pan|saut[ée] pan|serving (bowl|dish|plate|platter|spoon)s?|plastic wrap|baking (dish|sheet|pan|tray|paper|stone|tin|mat)|roasting (pan|tray|rack)|grill pan|heat-?proof|heavy cream|stand mixer|(the )?rest of|cool water|cool,? dry|((reduce|lower|raise|increase|adjust)( the)?|turn (the )?(heat )?(down|up|off)|remove from( the)?|off the) heat|(over|on) (low|medium|medium-low|medium-high|high|moderate) heat)\b"#
+    /// "the rest of the batter", "reduce the heat", "season the roast".
+    private static let ignoredPhrases = #"\b(brown sugar|brown rice|cooking spray|cooking oil|baking soda|baking powder|frying pan|saut[ée] pan|serving (bowl|dish|plate|platter|spoon)s?|plastic wrap|baking (dish|sheet|pan|tray|paper|stone|tin|mat)|roasting (pan|tray|rack)|grill pan|heat-?proof|heavy cream|stand mixer|(the|a|your|pot|chuck|beef|pork|lamb|rib) roast|(the )?rest of|cool water|cool,? dry|((reduce|lower|raise|increase|adjust)( the)?|turn (the )?(heat )?(down|up|off)|remove from( the)?|off the) heat|(over|on) (low|medium|medium-low|medium-high|high|moderate) heat)\b"#
 
 
     // MARK: Prep
