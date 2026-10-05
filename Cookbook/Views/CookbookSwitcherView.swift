@@ -192,19 +192,27 @@ struct CookbookSwitcherView: View {
     }
 }
 
-/// Cookbo's About page: the one all of Jon's apps share, with a row for the
-/// sites recipes can be imported from, and where this device keeps them.
+/// Cookbo's About page: the one all of Jon's apps share, with rows for the
+/// walkthrough from first launch and the sites recipes can be imported
+/// from, and where this device keeps them.
 struct CookboAboutView: View {
     @EnvironmentObject var store: RecipeStore
+    @State private var showingHowItWorks = false
 
     var body: some View {
         AboutView(app: app) {
+            AboutRow(title: "How it works", systemImage: "questionmark.circle") {
+                showingHowItWorks = true
+            }
             AboutLink(title: "Sites you can import from", systemImage: "globe",
                       url: URL(string: "https://cookbo.app/compatible-sites")!)
         }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .welcomeCover(isPresented: $showingHowItWorks) {
+            WelcomeView(isReplay: true)
+        }
     }
 
     private var app: AboutApp {
