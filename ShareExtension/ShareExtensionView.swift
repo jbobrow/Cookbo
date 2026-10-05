@@ -35,6 +35,13 @@ struct ShareExtensionView: View {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { onCancel() }
                     }
+                    // The same as Save to Cookbo, within reach without
+                    // scrolling past the recipe
+                    if case .preview = viewState, parsedRecipe != nil {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save", action: save)
+                        }
+                    }
                 }
         }
         .task {
@@ -239,13 +246,7 @@ struct ShareExtensionView: View {
     }
 
     private var saveButton: some View {
-        Button {
-            guard let recipe = parsedRecipe else { return }
-            onSave(recipe)
-            withAnimation {
-                viewState = .saved
-            }
-        } label: {
+        Button(action: save) {
             Label("Save to Cookbo", systemImage: "book.closed")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
@@ -255,6 +256,14 @@ struct ShareExtensionView: View {
         .tint(Color(red: 40/255, green: 156/255, blue: 255/255))
         .padding(.horizontal)
         .padding(.top, 8)
+    }
+
+    private func save() {
+        guard let recipe = parsedRecipe else { return }
+        onSave(recipe)
+        withAnimation {
+            viewState = .saved
+        }
     }
 
     // MARK: - Error
