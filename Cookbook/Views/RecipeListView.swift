@@ -446,7 +446,7 @@ struct RecipeListView: View {
         .sheet(isPresented: $showingCookbookSwitcher) {
             CookbookSwitcherView()
         }
-        .sheet(isPresented: $showingWelcome) {
+        .welcomeCover(isPresented: $showingWelcome) {
             WelcomeView(onFinish: { hasSeenWelcome = true })
         }
         .onAppear {
