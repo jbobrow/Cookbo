@@ -84,6 +84,10 @@ struct WelcomeView: View {
             WalkthroughPage(title: "Keep Cookbo up front",
                             message: "Move Cookbo to the start of your share sheet once, and every recipe after that is two taps away.") {
                 ShareFirstArt(showing: showing)
+            } detail: {
+                ShareFirstSteps()
+            } accessory: {
+                ShareFirstButton()
             }
         case .cook:
             WalkthroughPage(title: Self.turnsToCook ? "Turn sideways to cook" : "One step at a time",
@@ -292,18 +296,24 @@ private struct WelcomePage: View {
     }
 }
 
-/// Illustration on top, then a title and a short explanation.
-private struct WalkthroughPage<Art: View>: View {
+/// Illustration on top, then a title and a short explanation. A page can add
+/// a detail under the illustration that VoiceOver reads, unlike the
+/// illustration itself, and something to do under the explanation.
+private struct WalkthroughPage<Art: View, Detail: View, Accessory: View>: View {
     let title: String
     let message: String
     @ViewBuilder let art: Art
+    @ViewBuilder var detail: Detail
+    @ViewBuilder var accessory: Accessory
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 12)
-            art
-                .frame(maxWidth: 340)
-                .accessibilityHidden(true)
+            VStack(spacing: 14) {
+                art.accessibilityHidden(true)
+                detail
+            }
+            .frame(maxWidth: 340)
             Spacer(minLength: 28)
             Text(title.noWidow)
                 .font(.system(size: 30, weight: .bold))
@@ -316,9 +326,17 @@ private struct WalkthroughPage<Art: View>: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 340)
                 .padding(.top, 10)
+            accessory
+                .padding(.top, 18)
             Spacer(minLength: 20)
         }
         .padding(.horizontal, 24)
+    }
+}
+
+extension WalkthroughPage where Detail == EmptyView, Accessory == EmptyView {
+    init(title: String, message: String, @ViewBuilder art: () -> Art) {
+        self.init(title: title, message: message, art: art, detail: { EmptyView() }, accessory: { EmptyView() })
     }
 }
 
@@ -507,9 +525,16 @@ private struct ShareSheetApps: View {
             .background(color.gradient, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 
+    /// What the share sheet calls Cookbo: the app's name from iOS 26, and
+    /// the extension's own name before that.
+    static var cookboLabel: String {
+        if #available(iOS 26, *) { return "Cookbo" }
+        return "Import to Cookbo"
+    }
+
     private func label(_ app: App) -> String {
         switch app {
-        case .cookbo: "Import to Cookbo"
+        case .cookbo: Self.cookboLabel
         case .messages: "Messages"
         case .mail: "Mail"
         case .notes: "Notes"
@@ -518,8 +543,7 @@ private struct ShareSheetApps: View {
     }
 }
 
-/// Cookbo hopping from the end of the share sheet's row to the front, and
-/// the three taps that put it there.
+/// Cookbo hopping from the end of the share sheet's row to the front.
 private struct ShareFirstArt: View {
     let showing: Bool
 
@@ -527,19 +551,10 @@ private struct ShareFirstArt: View {
     @State private var moved = false
 
     var body: some View {
-        VStack(spacing: 14) {
-            ShareSheetApps(order: moved ? [.cookbo, .messages, .mail, .notes, .more]
-                                        : [.messages, .mail, .notes, .cookbo, .more],
-                           highlightsCookbo: moved)
-                .produce([(.peapod, 0.05), (.radish, 0.18)], em: 48, showing: showing, inset: 24)
-
-            VStack(alignment: .leading, spacing: 12) {
-                step(1, "Tap **More** at the end of the row of apps")
-                step(2, "Tap **Edit**")
-                step(3, "Add **Import to Cookbo** to Favorites and drag it to the top")
-            }
-            .artCard()
-        }
+        ShareSheetApps(order: moved ? [.cookbo, .messages, .mail, .notes, .more]
+                                    : [.messages, .mail, .notes, .cookbo, .more],
+                       highlightsCookbo: moved)
+            .produce([(.peapod, 0.05), (.radish, 0.18)], em: 48, showing: showing, inset: 24)
         // Moves each time the page comes into view, after a moment to see
         // where Cookbo started
         .task(id: showing) {
@@ -549,6 +564,18 @@ private struct ShareFirstArt: View {
             guard !Task.isCancelled else { return }
             withAnimation(reduceMotion ? nil : .spring(response: 0.6, dampingFraction: 0.72)) { moved = true }
         }
+    }
+}
+
+/// The taps that move Cookbo to the front, as the share sheet words them.
+private struct ShareFirstSteps: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            step(1, "Tap **More** at the end of the row of apps")
+            step(2, "Tap **Edit**")
+            step(3, "Tap **+** beside **\(ShareSheetApps.cookboLabel)**, then drag it to the top of Favorites")
+        }
+        .artCard()
     }
 
     private func step(_ number: Int, _ text: String) -> some View {
@@ -562,6 +589,24 @@ private struct ShareFirstArt: View {
                 .font(.system(size: 15))
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+/// Opens the real share sheet, with Cookbo in it, to make the change right
+/// there. It shares the sample recipe's page, so tapping Cookbo instead
+/// imports a recipe like any other.
+private struct ShareFirstButton: View {
+    var body: some View {
+        ShareLink(item: URL(string: SampleRecipe.sourceURL)!,
+                  preview: SharePreview(SampleRecipe.title, image: Image("AppIconImage"))) {
+            Label("Try It Now", systemImage: "square.and.arrow.up")
+                .font(.headline)
+                .padding(.horizontal, 20)
+                .frame(minHeight: 44)
+                .background(Color.accentColor.opacity(0.15), in: Capsule())
+                .contentShape(Capsule())
+        }
+        .accessibilityHint("Opens the share sheet")
     }
 }
 
