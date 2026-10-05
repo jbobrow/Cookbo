@@ -69,18 +69,11 @@ nonisolated struct CookPlan: Codable, Equatable {
     /// overview, one per step; nil until it has run.
 
     /// The step where an ingredient (an index into `Recipe.allIngredients`)
-    /// first goes in. Next checks it off there.
+    /// first goes in, which orders the prep cards.
     func firstUseStep(ofIngredient index: Int) -> Int? {
         steps.firstIndex { step in
             step.items.contains { $0.ingredientIndex == index && !$0.isPrepared }
         }
-    }
-
-    /// The ingredients that first go in at `step`.
-    func ingredientsFirstUsed(inStep step: Int) -> [Int] {
-        guard steps.indices.contains(step) else { return [] }
-        let indices = steps[step].items.compactMap { $0.isPrepared ? nil : $0.ingredientIndex }
-        return Array(Set(indices)).filter { firstUseStep(ofIngredient: $0) == step }.sorted()
     }
 }
 
@@ -299,7 +292,19 @@ nonisolated enum CookPlanner {
 
             let amount = use.amount.trimmingCharacters(in: .whitespaces)
             let allowedNumbers = numbers(in: original).union(numbers(in: ingredientTexts[index]))
-            let trustedAmount = amount.isEmpty || !numbers(in: amount).isSubset(of: allowedNumbers) ? nil : tidyAmount(amount)
+            // Its numbers must come from the recipe, and an amount without
+            // any must be an amount in the recipe's words ("a pinch"), not
+            // "none" or a word from the name ("seasalt")
+            let amountNumbers = numbers(in: amount)
+            let inRecipe = original.localizedCaseInsensitiveContains(amount)
+                || ingredientTexts[index].localizedCaseInsensitiveContains(amount)
+            let wordedAmount = inRecipe && amount.hasPattern(numberlessAmountWords, caseInsensitive: true)
+            var trustedAmount = amount.isEmpty || !amountNumbers.isSubset(of: allowedNumbers)
+                || (amountNumbers.isEmpty && !wordedAmount) ? nil : tidyAmount(amount)
+            // Just the count of a fuller amount: "1" of "1 (4 lb)"
+            if let count = trustedAmount, ingredient.amount.hasPrefix(count + " ") {
+                trustedAmount = ingredient.amount
+            }
 
             let suggestedName = use.name.trimmingCharacters(in: .whitespaces)
             let nameFits = suggestedName.count <= 40 && !highlightRanges(in: suggestedName, terms: ingredient.terms).isEmpty
@@ -445,6 +450,29 @@ nonisolated enum CookPlanner {
         var reuseNote = ""
         var isReusable = false
 
+        // "1 (4 pound) beef chuck roast", "2 (14-ounce) cans chickpeas",
+        // "1 (28-ounce can) tomatoes", "1 (15 ounce / 425g) can": the size is
+        // part of the amount, not an aside
+        var sizedAmount: String?
+        let sized = Patterns.regex(
+            "^\\s*(\(quantityPattern))\\s*\\(\\s*(?:about|roughly|approximately|approx\\.?)?\\s*(\(quantityPattern))[\\s-]*(\(unitPattern))\\b\\.?"
+                + "(?:\\s+(\(unitPattern))\\b)?(?:\\s*/[^()]*)?\\s*\\)\\s+(?:(\(unitPattern))\\b\\.?\\s+)?",
+            caseInsensitive: true
+        )
+        let nsText = text as NSString
+        if let match = sized.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)) {
+            let count = prettyQuantity(nsText.substring(with: match.range(at: 1)))
+            let size = prettyQuantity(nsText.substring(with: match.range(at: 2)))
+            var amount = "\(count) (\(size) \(unitLabel(nsText.substring(with: match.range(at: 3)), quantity: size)))"
+            // The container, inside the parentheses or after them
+            for group in [5, 4] where match.range(at: group).location != NSNotFound {
+                amount += " " + nsText.substring(with: match.range(at: group)).lowercased()
+                break
+            }
+            sizedAmount = amount
+            text = nsText.substring(from: match.range.location + match.range.length)
+        }
+
         // Parentheticals: keep "optional", drop "(about 4 cups)", innermost
         // first so "((12 ounces))" and "(for serving (optional))" go entirely
         let parenthetical = Patterns.regex(#"\s*\(([^()]*)\)"#)
@@ -483,7 +511,9 @@ nonisolated enum CookPlanner {
             caseInsensitive: true
         )
         let nsName = name as NSString
-        if let match = amountPattern.firstMatch(in: name, range: NSRange(location: 0, length: nsName.length)) {
+        if let sizedAmount {
+            amount = sizedAmount
+        } else if let match = amountPattern.firstMatch(in: name, range: NSRange(location: 0, length: nsName.length)) {
             var parts = [prettyQuantity(nsName.substring(with: match.range(at: 1)))]
             if match.range(at: 3).location != NSNotFound {
                 let adjectives = nsName.substring(with: match.range(at: 2)).trimmingCharacters(in: .whitespaces)
@@ -822,7 +852,10 @@ nonisolated enum CookPlanner {
         return items.filter { seen.insert($0).inserted }
     }
 
-    private static let quantityPattern = #"\d+(?:\.\d+)?(?:\s*[-–]\s*|\s+to\s+)\d+(?:\.\d+)?(?![/.\d]|\s+\d+/)|\d+\s+and\s+\d+/\d+|\d+\s+and\s+[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]|\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]?|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕](?:\s*(?:-|–|to)\s*(?:\d+/\d+|\d+(?:\.\d+)?|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]))?"#
+    private static let quantityPattern = #"\d+(?:\.\d+)?(?:\s*[-–]\s*|\s+to\s+)\d+(?:\.\d+)?(?![/.\d]|\s+\d+/)|\d+\s+and\s+\d+/\d+|\d+\s+and\s+[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]|\d+\s+[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]|\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]?|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕](?:\s*(?:-|–|to)\s*(?:\d+/\d+|\d+(?:\.\d+)?|[½¼¾⅓⅔⅛⅜⅝⅞⅙⅚⅕]))?"#
+    /// Amounts said in words rather than numbers.
+    private static let numberlessAmountWords = #"\b(pinch(es)?|dash(es)?|handfuls?|splash(es)?|drizzle|sprinkle|sprigs?|squeeze|knob|few|couple|some|little|half|taste|needed|one|two|three|four|five|six|seven|eight|nine|ten|dozen)\b"#
+
     private static let unitPattern = "cups?|tablespoons?|tbsps?|tbs|teaspoons?|tsps?|pounds?|lbs?|ounces?|oz|grams?|g|kilograms?|kg|ml|milliliters?|liters?|pinch(?:es)?|dash(?:es)?|cans?|sticks?|bunch(?:es)?|sprigs?|quarts?|pints?|cloves?|heads?|slices?|handfull?s?|thumbs?|knobs?|c"
 
     private static let unitAbbreviations: [String: String] = [
