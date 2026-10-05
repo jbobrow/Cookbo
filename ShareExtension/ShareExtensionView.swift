@@ -85,11 +85,6 @@ struct ShareExtensionView: View {
                     timeSection(recipe)
                 }
 
-                // Description/notes
-                if !recipe.notes.isEmpty {
-                    notesSection(recipe)
-                }
-
                 // Ingredients
                 if !recipe.ingredients.isEmpty {
                     ingredientsSection(recipe)
@@ -98,6 +93,12 @@ struct ShareExtensionView: View {
                 // Directions
                 if !recipe.directions.isEmpty {
                     directionsSection(recipe)
+                }
+
+                // Notes last, as on the recipe page, so the ingredients and
+                // steps it found come first
+                if !recipe.notes.isEmpty {
+                    notesSection(recipe)
                 }
 
                 // Save button
@@ -173,7 +174,10 @@ struct ShareExtensionView: View {
     }
 
     private func notesSection(_ recipe: RecipeParser.ParsedRecipe) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Notes")
+                .font(.headline)
+
             Text(recipe.notes)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
