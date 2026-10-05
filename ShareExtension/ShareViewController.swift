@@ -1,3 +1,61 @@
+import Foundation
+
+/// The web page a share carries, however the sharing app packed it. Safari
+/// hands over a URL, but SwiftUI's ShareLink and others send data, which can
+/// be an archived URL rather than the address's text.
+enum SharedURL {
+    static func load(from provider: NSItemProvider, completion: @escaping @Sendable (String?) -> Void) {
+        guard provider.canLoadObject(ofClass: URL.self) else {
+            loadItem(from: provider, completion: completion)
+            return
+        }
+        _ = provider.loadObject(ofClass: URL.self) { url, _ in
+            if let url, isWeb(url) {
+                completion(url.absoluteString)
+            } else {
+                loadItem(from: provider, completion: completion)
+            }
+        }
+    }
+
+    private static func loadItem(from provider: NSItemProvider, completion: @escaping @Sendable (String?) -> Void) {
+        provider.loadItem(forTypeIdentifier: "public.url", options: nil) { item, _ in
+            completion(webAddress(in: item))
+        }
+    }
+
+    static func webAddress(in item: NSSecureCoding?) -> String? {
+        if let url = item as? URL {
+            return isWeb(url) ? url.absoluteString : nil
+        }
+        if let text = item as? String {
+            return webAddress(inText: text)
+        }
+        guard let data = item as? Data else { return nil }
+        if let url = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSURL.self, from: data) as URL?, isWeb(url) {
+            return url.absoluteString
+        }
+        if let text = String(data: data, encoding: .utf8), let address = webAddress(inText: text) {
+            return address
+        }
+        if let url = URL(dataRepresentation: data, relativeTo: nil), isWeb(url) {
+            return url.absoluteString
+        }
+        return nil
+    }
+
+    private static func webAddress(inText text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), isWeb(url) else { return nil }
+        return trimmed
+    }
+
+    private static func isWeb(_ url: URL) -> Bool {
+        let scheme = url.scheme?.lowercased()
+        return scheme == "http" || scheme == "https"
+    }
+}
+
 #if canImport(UIKit)
 import UIKit
 import SwiftUI
@@ -24,13 +82,10 @@ class ShareViewController: UIViewController {
 
             for provider in attachments {
                 if provider.hasItemConformingToTypeIdentifier("public.url") {
-                    provider.loadItem(forTypeIdentifier: "public.url", options: nil) { [weak self] data, _ in
+                    SharedURL.load(from: provider) { [weak self] urlString in
                         DispatchQueue.main.async {
-                            if let url = data as? URL {
-                                self?.showShareUI(urlString: url.absoluteString)
-                            } else if let urlData = data as? Data,
-                                      let url = URL(dataRepresentation: urlData, relativeTo: nil) {
-                                self?.showShareUI(urlString: url.absoluteString)
+                            if let urlString {
+                                self?.showShareUI(urlString: urlString)
                             } else {
                                 self?.dismiss()
                             }
@@ -128,13 +183,10 @@ class ShareViewController: NSViewController {
 
             for provider in attachments {
                 if provider.hasItemConformingToTypeIdentifier("public.url") {
-                    provider.loadItem(forTypeIdentifier: "public.url", options: nil) { [weak self] data, _ in
+                    SharedURL.load(from: provider) { [weak self] urlString in
                         DispatchQueue.main.async {
-                            if let url = data as? URL {
-                                self?.showShareUI(urlString: url.absoluteString)
-                            } else if let urlData = data as? Data,
-                                      let url = URL(dataRepresentation: urlData, relativeTo: nil) {
-                                self?.showShareUI(urlString: url.absoluteString)
+                            if let urlString {
+                                self?.showShareUI(urlString: urlString)
                             } else {
                                 self?.dismiss()
                             }
