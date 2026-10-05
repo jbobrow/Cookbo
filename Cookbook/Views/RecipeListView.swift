@@ -20,6 +20,10 @@ struct RecipeListView: View {
     @State private var showingWeekReview = false
     @AppStorage("recipeViewMode") private var viewMode: RecipeViewMode = .grid
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
+    /// The last version whose What's New was shown, or skipped because the
+    /// walkthrough came first.
+    @AppStorage("lastWhatsNewVersion") private var lastWhatsNewVersion = ""
+    @State private var whatsNew: WhatsNew?
     /// Persisted across launches; the animated source of truth is
     /// `collapsedCategoryIDs` below, because @AppStorage writes land outside
     /// the withAnimation transaction and the rows would jump.
@@ -449,9 +453,16 @@ struct RecipeListView: View {
         .welcomeCover(isPresented: $showingWelcome) {
             WelcomeView(onFinish: { hasSeenWelcome = true })
         }
+        .welcomeCover(isPresented: Binding(get: { whatsNew != nil }, set: { if !$0 { whatsNew = nil } })) {
+            if let whatsNew {
+                WhatsNewView(whatsNew: whatsNew)
+                    .onDisappear(perform: showWeekReviewIfDue)
+            }
+        }
         .onAppear {
             loadCollapsedCategories()
             showWelcomeIfNeeded()
+            showWhatsNewIfNeeded()
             showWeekReviewIfDue()
         }
         .onChange(of: store.recipes.count) { _, _ in
@@ -467,8 +478,14 @@ struct RecipeListView: View {
         } message: {
             Text("This week's plan has \(store.recipes(in: .thisWeek).count) recipe\(store.recipes(in: .thisWeek).count == 1 ? "" : "s"). Clear it out, or keep it going for next week?")
         }
-        .onChange(of: store.isICloudAvailable) { _, _ in showWelcomeIfNeeded() }
-        .onChange(of: store.useLocalStorage) { _, _ in showWelcomeIfNeeded() }
+        .onChange(of: store.isICloudAvailable) { _, _ in
+            showWelcomeIfNeeded()
+            showWhatsNewIfNeeded()
+        }
+        .onChange(of: store.useLocalStorage) { _, _ in
+            showWelcomeIfNeeded()
+            showWhatsNewIfNeeded()
+        }
         .onChange(of: store.shouldShowNewRecipe) { oldValue, newValue in
             if newValue {
                 showingAddRecipe = true
@@ -636,13 +653,28 @@ struct RecipeListView: View {
         if store.recipes.isEmpty && !store.hasRecipeFiles {
             store.addSampleRecipe()
             showingWelcome = true
+            // The walkthrough already shows what's new in this version
+            lastWhatsNewVersion = WhatsNew.currentVersion ?? ""
         } else {
             // An existing cookbook, so there's nothing to introduce
             hasSeenWelcome = true
         }
     }
 
+    /// Shows what's new, once, to someone who updated to a version that has
+    /// something to show. Marked as seen as soon as it's up, so it never
+    /// comes back, however it's closed.
+    private func showWhatsNewIfNeeded() {
+        guard hasSeenWelcome, !showingWelcome, whatsNew == nil else { return }
+        guard store.isICloudAvailable || store.useLocalStorage else { return }
+        guard let current = WhatsNew.current, current.version != lastWhatsNewVersion else { return }
+        lastWhatsNewVersion = current.version
+        whatsNew = current
+    }
+
     private func showWeekReviewIfDue() {
+        // Waits until What's New or the walkthrough is closed
+        guard whatsNew == nil, !showingWelcome else { return }
         guard store.isWeekPlanReviewDue else { return }
         showingWeekReview = true
     }

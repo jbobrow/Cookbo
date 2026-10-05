@@ -239,9 +239,9 @@ struct WelcomeView: View {
 }
 
 extension View {
-    /// Shows the walkthrough over everything on iPhone and iPad, and as a
-    /// sheet on the Mac, which has no full-screen cover.
-    func welcomeCover(isPresented: Binding<Bool>, @ViewBuilder content: @escaping () -> WelcomeView) -> some View {
+    /// Shows the walkthrough, or What's New, over everything on iPhone and
+    /// iPad, and as a sheet on the Mac, which has no full-screen cover.
+    func welcomeCover<Content: View>(isPresented: Binding<Bool>, @ViewBuilder content: @escaping () -> Content) -> some View {
         #if os(macOS)
         sheet(isPresented: isPresented, content: content)
         #else
