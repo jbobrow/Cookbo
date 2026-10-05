@@ -16,6 +16,10 @@ struct CookIntroView: View {
     @Binding var measured: Set<Int>
     let accentColor: Color
     let isLandscape: Bool
+    /// A swipe between pages, which this page follows. Passing over the
+    /// checkboxes isn't tapping them.
+    let drag: PageDrag
+    let pageKey: String
     let onNext: () -> Void
     let onBack: () -> Void
     let onSkip: () -> Void
@@ -27,19 +31,23 @@ struct CookIntroView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(page == .overview ? overview.totalLabel : (prepTasks.isEmpty ? "Measure these first" : "Cut these first"))
-                .font(.system(size: isLandscape ? 26 : 30, weight: .bold))
-                .padding(.top, 8)
-                .accessibilityAddTraits(.isHeader)
+            // The page moves with a swipe; the buttons stay put
+            VStack(alignment: .leading, spacing: 10) {
+                Text(page == .overview ? overview.totalLabel : (prepTasks.isEmpty ? "Measure these first" : "Cut these first"))
+                    .font(.system(size: isLandscape ? 26 : 30, weight: .bold))
+                    .padding(.top, 8)
+                    .accessibilityAddTraits(.isHeader)
 
-            Group {
-                switch page {
-                case .overview:
-                    CookOverviewTimeline(overview: overview, accentColor: accentColor, isLandscape: isLandscape)
-                case .prep: prepList
+                Group {
+                    switch page {
+                    case .overview:
+                        CookOverviewTimeline(overview: overview, accentColor: accentColor, isLandscape: isLandscape)
+                    case .prep: prepList
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .followsSwipe(drag, page: pageKey)
 
             buttons
         }
@@ -134,6 +142,7 @@ struct CookIntroView: View {
         let task = measureTasks[index]
         let done = measured.contains(index)
         return Button {
+            guard !drag.justMoved else { return }
             if measured.contains(index) { measured.remove(index) } else { measured.insert(index) }
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -212,6 +221,7 @@ struct CookIntroView: View {
     }
 
     private func toggle(_ index: Int) {
+        guard !drag.justMoved else { return }
         if prepped.contains(index) { prepped.remove(index) } else { prepped.insert(index) }
     }
 
