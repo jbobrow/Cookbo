@@ -94,7 +94,7 @@ struct RecipeParserCore {
 
         if var recipe = parseJSONLD(html: html, sourceURL: sourceURL) {
             // Always try HTML fallback and use whichever has more steps
-            let htmlDirections = parseDirectionsFromHTML(html: html)
+            let htmlDirections = splitNumberedSteps(parseDirectionsFromHTML(html: html))
             if htmlDirections.count > recipe.directions.count {
                 recipe.directions = htmlDirections
             }
@@ -837,6 +837,8 @@ struct RecipeParserCore {
         let ingredients = (dict["recipeIngredient"] as? [String]) ?? []
 
         var directions: [String] = []
+        // The same dish made another way ("The Crockpot"), kept for the notes
+        var otherMethods: [String] = []
         if let instructions = dict["recipeInstructions"] {
             if let steps = instructions as? [String] {
                 directions = steps
@@ -850,14 +852,24 @@ struct RecipeParserCore {
 
                         if stepType == "HowToSection" {
                             // HowToSection contains nested HowToStep items — flatten them
+                            var sectionSteps: [String] = []
                             let items = (stepDict["itemListElement"] as? [Any]) ?? []
                             for item in items {
                                 guard let itemDict = item as? [String: Any] else { continue }
                                 if let text = itemDict["text"] as? String, !text.isEmpty {
-                                    directions.append(text)
+                                    sectionSteps.append(text)
                                 } else if let name = itemDict["name"] as? String, !name.isEmpty {
-                                    directions.append(name)
+                                    sectionSteps.append(name)
                                 }
+                            }
+                            // Another way to make it doesn't come after the first
+                            let sectionName = stripHTML(stepDict["name"] as? String ?? "")
+                            if !directions.isEmpty, isOtherMethod(sectionName) {
+                                let numbered = splitNumberedSteps(sectionSteps.map { stripHTML($0) })
+                                    .enumerated().map { "\($0.offset + 1). \($0.element)" }
+                                otherMethods.append(([sectionName] + numbered).joined(separator: "\n"))
+                            } else {
+                                directions.append(contentsOf: sectionSteps)
                             }
                         } else if let text = stepDict["text"] as? String, !text.isEmpty {
                             directions.append(text)
@@ -904,18 +916,53 @@ struct RecipeParserCore {
             }
         }
 
-        let notes = dict["description"] as? String ?? ""
+        let description = stripHTML(dict["description"] as? String ?? "")
+        let notes = ([description] + otherMethods).filter { !$0.isEmpty }.joined(separator: "\n\n")
 
         return ParsedRecipe(
             title: stripHTML(title),
             ingredients: ingredients.map { stripLeadingBullets(stripHTML($0)) },
-            directions: directions.map { stripHTML($0) },
+            directions: splitNumberedSteps(directions.map { stripHTML($0) }),
             sourceURL: sourceURL,
             imageURL: imageURL,
             prepDuration: prepTime,
             cookDuration: cookTime,
-            notes: stripHTML(notes)
+            notes: notes
         )
+    }
+
+    /// A section that makes the same dish another way: "The Crockpot",
+    /// "Instant Pot", "Stovetop Method".
+    static func isOtherMethod(_ sectionName: String) -> Bool {
+        let pattern = #"\b(crock-?\s?pot|slow[- ]?cooker|instant\s?pot|pressure[- ]?cooker|multi-?cooker|air[- ]?fryer)\b|\b(stove-?\s?top|oven|grill)\s+(method|version|directions|instructions)\b"#
+        return sectionName.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// Some sites publish a whole method as one step, numbered inline:
+    /// "1. Preheat the oven to 325° F.2. Arrange the onions…". Each number
+    /// becomes its own step, but only when they count up 1, 2, 3… from the
+    /// very start, so a stray "2." in the middle of a step never splits it.
+    static func splitNumberedSteps(_ directions: [String]) -> [String] {
+        guard let marker = try? NSRegularExpression(pattern: #"(?:^|(?<=[\s.!?)]))(\d{1,2})\.\s+(?=\p{L})"#) else {
+            return directions
+        }
+        return directions.flatMap { direction -> [String] in
+            let text = direction.trimmingCharacters(in: .whitespacesAndNewlines) as NSString
+            var picked: [NSRange] = []
+            for match in marker.matches(in: text as String, range: NSRange(location: 0, length: text.length)) {
+                if picked.isEmpty, match.range.location != 0 { break }
+                if Int(text.substring(with: match.range(at: 1))) == picked.count + 1 {
+                    picked.append(match.range)
+                }
+            }
+            guard picked.count >= 2 else { return [direction] }
+            return picked.indices.map { i in
+                let start = picked[i].upperBound
+                let end = i + 1 < picked.count ? picked[i + 1].location : text.length
+                return text.substring(with: NSRange(location: start, length: end - start))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }.filter { !$0.isEmpty }
+        }
     }
 
     // MARK: - HTML Ingredient Group Parsing

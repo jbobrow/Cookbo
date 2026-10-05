@@ -233,14 +233,12 @@ final class CookPlanTests: XCTestCase {
         XCTAssertEqual(step7.items.first { $0.ingredientIndex == 8 }?.note, "optional")
     }
 
-    func testFirstUseChecksOffEachIngredientOnce() {
+    func testFirstUseStepOfEachIngredient() {
         let plan = CookPlanner.heuristicPlan(for: soup)
-        XCTAssertEqual(plan.ingredientsFirstUsed(inStep: 0), [0, 1])
-        XCTAssertEqual(plan.ingredientsFirstUsed(inStep: 1), [2, 3])
-        XCTAssertEqual(plan.ingredientsFirstUsed(inStep: 5), [7])
-        XCTAssertEqual(plan.ingredientsFirstUsed(inStep: 6), [8])
-        let all = (0..<7).flatMap { plan.ingredientsFirstUsed(inStep: $0) }
-        XCTAssertEqual(all.sorted(), Array(0..<9))
+        XCTAssertEqual((0..<9).map { plan.firstUseStep(ofIngredient: $0) }.map { $0 ?? -1 }.prefix(4), [0, 0, 1, 1])
+        XCTAssertEqual(plan.firstUseStep(ofIngredient: 7), 5)
+        XCTAssertEqual(plan.firstUseStep(ofIngredient: 8), 6)
+        XCTAssertTrue((0..<9).allSatisfy { plan.firstUseStep(ofIngredient: $0) != nil }, "every ingredient goes in somewhere")
     }
 
     // MARK: - Times
@@ -365,6 +363,94 @@ final class CookPlanTests: XCTestCase {
         XCTAssertFalse(step.items.contains { $0.name == "saffron" })
         XCTAssertEqual(firstUse[4], 2)
         XCTAssertNil(step.shortText)
+    }
+
+    func testMerge_aPlaceholderIsntAnAmount() {
+        let heuristic = CookPlanner.heuristicPlan(for: soup)
+        var firstUse: [Int: Int] = [0: 0, 1: 0, 2: 1, 3: 1]
+        let suggestion = SuggestedStep(
+            shortText: "",
+            uses: [
+                .init(ingredientNumber: 5, amount: "none", name: "garlic"),
+                .init(ingredientNumber: 6, amount: "N/A", name: "sugar")
+            ],
+            carryOvers: []
+        )
+        let step = CookPlanner.merge(
+            suggestion, into: heuristic.steps[2], stepIndex: 2,
+            stepTexts: soup.directions.map(\.text),
+            ingredientTexts: soup.allIngredients.map(\.text),
+            firstUse: &firstUse
+        )
+        XCTAssertEqual(step.items.first { $0.ingredientIndex == 4 }?.amount, "3", "falls back to the ingredient line")
+        XCTAssertEqual(step.items.first { $0.ingredientIndex == 5 }?.amount, "1 tsp")
+        XCTAssertFalse(step.items.contains { $0.amount.localizedCaseInsensitiveContains("none") })
+    }
+
+    /// The pot roast from halfbakedharvest.com, where the model answered
+    /// "none" and "seasalt" for amounts.
+    private let potRoast = Recipe(
+        title: "Cider Braised Pot Roast",
+        ingredients: [
+            Ingredient(text: "1 (4 pound)  beef chuck roast"),
+            Ingredient(text: "seasalt and black pepper"),
+            Ingredient(text: "2 tablespoons all-purpose or gluten flour")
+        ],
+        directions: [
+            Direction(text: "Preheat the oven to 325° F. Season the roast with salt and pepper, then coat with flour.", order: 1),
+            Direction(text: "At the same time, return the roast to the oven, uncovered, for 10-15 minutes, until caramelized on top.", order: 2)
+        ]
+    )
+
+    func testMerge_potRoastAmountsComeFromTheRecipe() {
+        let heuristic = CookPlanner.heuristicPlan(for: potRoast)
+        let texts = potRoast.directions.map(\.text), lines = potRoast.allIngredients.map(\.text)
+        var firstUse: [Int: Int] = [:]
+        let first = CookPlanner.merge(
+            SuggestedStep(shortText: "", uses: [
+                .init(ingredientNumber: 1, amount: "1", name: "beef chuck roast"),
+                .init(ingredientNumber: 2, amount: "seasalt", name: "seasalt and black pepper"),
+                .init(ingredientNumber: 3, amount: "2 tablespoons", name: "flour")
+            ], carryOvers: []),
+            into: heuristic.steps[0], stepIndex: 0, stepTexts: texts, ingredientTexts: lines, firstUse: &firstUse
+        )
+        XCTAssertEqual(first.items.first { $0.ingredientIndex == 0 }?.amount, "1 (4 lb)", "the count of a fuller amount gets the size")
+        XCTAssertEqual(first.items.first { $0.ingredientIndex == 1 }?.amount, "", "a word from the name isn't an amount")
+        XCTAssertEqual(first.items.first { $0.ingredientIndex == 2 }?.amount, "2 tbsp")
+
+        let second = CookPlanner.merge(
+            SuggestedStep(shortText: "", uses: [.init(ingredientNumber: 1, amount: "none", name: "beef chuck roast")], carryOvers: []),
+            into: heuristic.steps[1], stepIndex: 1, stepTexts: texts, ingredientTexts: lines, firstUse: &firstUse
+        )
+        let roast = second.items.first { $0.ingredientIndex == 0 }
+        XCTAssertEqual(roast?.amount, "")
+        XCTAssertEqual(roast?.preparedInStep, 0, "the roast went in at step 1")
+    }
+
+    func testMerge_aWordedAmountFromTheRecipeIsKept() {
+        let recipe = Recipe(
+            ingredients: [Ingredient(text: "Kosher salt")],
+            directions: [Direction(text: "Add a pinch of salt and stir.", order: 1)]
+        )
+        var firstUse: [Int: Int] = [:]
+        let step = CookPlanner.merge(
+            SuggestedStep(shortText: "", uses: [.init(ingredientNumber: 1, amount: "a pinch", name: "salt")], carryOvers: []),
+            into: CookPlanner.heuristicPlan(for: recipe).steps[0], stepIndex: 0,
+            stepTexts: recipe.directions.map(\.text), ingredientTexts: recipe.allIngredients.map(\.text), firstUse: &firstUse
+        )
+        XCTAssertEqual(step.items.first?.amount, "a pinch")
+    }
+
+    func testParseIngredient_sizeInParenthesesIsPartOfTheAmount() {
+        let roast = CookPlanner.parseIngredient("1 (4 pound)  beef chuck roast")
+        XCTAssertEqual(roast.amount, "1 (4 lb)")
+        XCTAssertEqual(roast.name, "beef chuck roast")
+        let chickpeas = CookPlanner.parseIngredient("2 (14-ounce) cans chickpeas, drained")
+        XCTAssertEqual(chickpeas.amount, "2 (14 oz) cans")
+        XCTAssertEqual(chickpeas.name, "chickpeas")
+        XCTAssertEqual(chickpeas.note, "drained")
+        let tomatoes = CookPlanner.parseIngredient("3 pounds tomatoes, cored and chopped (about 6 cups)")
+        XCTAssertEqual(tomatoes.amount, "3 lb", "an aside after the name still goes")
     }
 
     func testMerge_carryOverFromAnEarlierStep() {

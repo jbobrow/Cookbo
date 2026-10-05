@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// One step at a time, in big type, with the ingredients that step needs.
-/// Next is the only control you need: it checks off the step and the
-/// ingredients that first go in there, on the same checkmarks the recipe
-/// page shows. After the last step, Mark as Cooked.
+/// Next is the only control you need: it checks off the step, so the recipe
+/// page can offer to resume there. The ingredient checkmarks on the recipe
+/// page are for gathering what you need, so cooking leaves them alone.
+/// After the last step, Mark as Cooked.
 ///
 /// On iPhone it opens when you turn the phone sideways on a recipe page and
 /// closes when you turn it back; Start Cooking opens it anywhere.
@@ -25,9 +26,6 @@ struct CookModeView: View {
     @AppStorage("cookModeStartedTimer") private var hasStartedTimer = false
 
     @State private var stepIndex: Int
-    /// Rows checked by hand on this step that aren't a first use (a second
-    /// pinch of salt), so they don't touch the recipe's checkmarks.
-    @State private var checkedRows: Set<Int> = []
     @State private var isCooked = false
     @State private var timerToStop: CookTimer?
     /// Which way the step text slides: in from the right going forward,
@@ -69,6 +67,20 @@ struct CookModeView: View {
     }
 
     @State private var introCache = IntroCache()
+    @State private var drag = PageDrag()
+
+    /// A finger was just swiping between steps. Whatever it lifts off isn't
+    /// being tapped: a swipe across a row doesn't check it off.
+    private var isSwiping: Bool { drag.justMoved }
+
+    /// Which page is showing, so a swipe moves that page and not the next.
+    private var pageKey: String {
+        switch introPage {
+        case .overview: "overview"
+        case .prep: "prep"
+        case nil: isCooked ? "cooked" : isFinished ? "finish" : "step \(stepIndex)"
+        }
+    }
 
     /// The overview, prep and measure lists, worked out once for this recipe
     /// and plan rather than on every redraw (turning the screen redraws
@@ -113,16 +125,20 @@ struct CookModeView: View {
                         measured: $measured,
                         accentColor: accentColor,
                         isLandscape: isLandscape,
-                        onNext: introNext,
-                        onBack: { withAnimation(.snappy) { introPage = .overview } },
+                        drag: drag,
+                        pageKey: pageKey,
+                        onNext: { if !isSwiping { introNext() } },
+                        onBack: { if !isSwiping { withAnimation(.snappy) { introPage = .overview } } },
                         onSkip: { withAnimation(.snappy) { introPage = nil } }
                     )
                     .id(page)
                     .transition(.opacity)
                 } else if isCooked {
                     cookedView
+                        .followsSwipe(drag, page: pageKey)
                 } else if isFinished {
                     finishView(isLandscape: isLandscape)
+                        .followsSwipe(drag, page: pageKey)
                 } else if isLandscape {
                     landscapeStep(scale: scale)
                 } else {
@@ -138,6 +154,7 @@ struct CookModeView: View {
             .opacity(contentShown ? 1 : 0)
         }
         .background(.background)
+        .onGeometryChange(for: CGFloat.self, of: \.size.width) { drag.width = $0 }
         .onGeometryChange(for: Bool.self, of: { $0.size.width > $0.size.height }) { landscape in
             screenIsLandscape = landscape
             screenTurned(toLandscape: landscape)
@@ -265,10 +282,16 @@ struct CookModeView: View {
     private func landscapeStep(scale: CGFloat) -> some View {
         VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    ingredientList
-                    Spacer(minLength: 0)
+                // A long list scrolls rather than running off the bottom; each
+                // step starts at the top of its own
+                ScrollView(.vertical) {
+                    ingredientListContent
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .scrollBounceBehavior(.basedOnSize)
+                .id(stepIndex)
+                .transition(.opacity)
+                .fadesWithSwipe(drag, page: pageKey)
                 .frame(width: 228 * min(scale, 1.3), alignment: .leading)
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(.trailing, 24)
@@ -278,7 +301,7 @@ struct CookModeView: View {
 
                 // Sliding step text is masked at the rule, not drawn over the
                 // ingredients (taller than the column so highlights aren't cut)
-                slidingStepText(size: fontSize(landscape: true) * scale)
+                slidingStepText(size: fontSize(landscape: true) * scale, scrolls: true)
                     .padding(.leading, 28)
             }
             .frame(maxHeight: .infinity)
@@ -301,11 +324,12 @@ struct CookModeView: View {
                     .padding(.vertical, 14)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .fadesWithSwipe(drag, page: pageKey)
             }
 
             shortTextToggle
 
-            slidingStepText(size: fontSize(landscape: false) * scale)
+            slidingStepText(size: fontSize(landscape: false) * scale, scrolls: false)
 
             HStack(spacing: 12) {
                 backButton(compact: true)
@@ -361,13 +385,22 @@ struct CookModeView: View {
         }
     }
 
-    /// The step's text, replaced with a slide when the step changes. The slide
-    /// happens inside a clipped box, so in landscape the incoming text is cut
-    /// off at the rule instead of passing over the ingredients.
-    private func slidingStepText(size: CGFloat) -> some View {
+    /// The step's text, replaced with a slide when the step changes and
+    /// moving with a swipe. The slide happens inside a clipped box, so in
+    /// landscape the incoming text is cut off at the rule instead of passing
+    /// over the ingredients. In landscape a long step scrolls.
+    private func slidingStepText(size: CGFloat, scrolls: Bool) -> some View {
         ZStack(alignment: .topLeading) {
-            stepText(size: size)
+            Group {
+                if scrolls {
+                    ScrollView(.vertical) { stepText(size: size) }
+                        .scrollBounceBehavior(.basedOnSize)
+                } else {
+                    stepText(size: size)
+                }
+            }
                 .id(stepIndex)
+                .followsSwipe(drag, page: pageKey)
                 .transition(.asymmetric(
                     insertion: .move(edge: movingBack ? .leading : .trailing).combined(with: .opacity),
                     removal: .opacity
@@ -509,41 +542,31 @@ struct CookModeView: View {
                     .foregroundStyle(.secondary)
             }
 
-            ForEach(Array(currentStep.items.enumerated()), id: \.offset) { row, item in
-                Button { toggle(row: row, item: item) } label: {
-                    ingredientRow(item, checked: isChecked(row: row, item: item))
-                }
-                .buttonStyle(.plain)
-                .disabled(item.isPrepared)
+            ForEach(Array(currentStep.items.enumerated()), id: \.offset) { _, item in
+                ingredientRow(item)
             }
         }
     }
 
-    private func ingredientRow(_ item: CookStepItem, checked: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            // Plain colors, and no morph between the two symbols: animating
-            // between them mid step change flashed magenta
-            Image(systemName: checked ? "checkmark.circle.fill" : "circle")
-                .font(.title3)
-                .foregroundColor(checked ? .green : .gray)
-                .contentTransition(.identity)
+    /// What goes in, to read at a glance; nothing to tick off mid-cook. Next
+    /// checks the step's ingredients off in the recipe. Something made in an
+    /// earlier step is dimmed: it's already there.
+    private func ingredientRow(_ item: CookStepItem) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            (Text(item.amount.isEmpty ? "" : item.amount + " ").bold()
+             + Text(item.amount.isEmpty ? item.name.prefix(1).uppercased() + item.name.dropFirst() : item.name))
+                .font(.body)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 1) {
-                (Text(item.amount.isEmpty ? "" : item.amount + " ").bold()
-                 + Text(item.amount.isEmpty ? item.name.prefix(1).uppercased() + item.name.dropFirst() : item.name))
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if let detail = rowDetail(item) {
-                    Text(detail)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+            if let detail = rowDetail(item) {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-            .opacity(checked ? 0.5 : 1)
         }
-        .contentShape(Rectangle())
+        .opacity(item.isPrepared ? 0.5 : 1)
+        .accessibilityElement(children: .combine)
     }
 
     private func rowDetail(_ item: CookStepItem) -> String? {
@@ -553,28 +576,6 @@ struct CookModeView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private func isFirstUse(_ item: CookStepItem) -> Bool {
-        guard let index = item.ingredientIndex, !item.isPrepared else { return false }
-        return plan.firstUseStep(ofIngredient: index) == stepIndex
-    }
-
-    private func isChecked(row: Int, item: CookStepItem) -> Bool {
-        if item.isPrepared { return true }
-        if isFirstUse(item), let index = item.ingredientIndex { return recipe.isIngredientChecked(index) }
-        return checkedRows.contains(row)
-    }
-
-    private func toggle(row: Int, item: CookStepItem) {
-        if isFirstUse(item), let index = item.ingredientIndex {
-            recipe.setIngredientChecked(index, !recipe.isIngredientChecked(index))
-            store.saveRecipe(recipe)
-        } else if checkedRows.contains(row) {
-            checkedRows.remove(row)
-        } else {
-            checkedRows.insert(row)
-        }
-    }
-
     // MARK: - Moving between steps
 
     private var nextLabel: String {
@@ -582,7 +583,7 @@ struct CookModeView: View {
     }
 
     private func nextButton(fullWidth: Bool) -> some View {
-        Button(action: advance) {
+        Button { if !isSwiping { advance() } } label: {
             HStack(spacing: 6) {
                 Text(nextLabel)
                 Image(systemName: "chevron.right")
@@ -601,7 +602,7 @@ struct CookModeView: View {
 
     @ViewBuilder
     private func backButton(compact: Bool) -> some View {
-        Button(action: goBack) {
+        Button { if !isSwiping { goBack() } } label: {
             if compact {
                 Image(systemName: "chevron.left")
                     .font(.title3.weight(.semibold))
@@ -644,8 +645,7 @@ struct CookModeView: View {
     @ViewBuilder
     private var nextHint: some View {
         if nextTaps < 3 {
-            let count = plan.ingredientsFirstUsed(inStep: stepIndex).count
-            Text(count > 0 ? "Next checks off this step and its \(count == 1 ? "ingredient" : "\(count) ingredients")" : "Next checks off this step")
+            Text("Next checks off this step")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
@@ -656,15 +656,11 @@ struct CookModeView: View {
     private func advance() {
         guard !isFinished else { return }
         recipe.setStepCompleted(stepIndex, true)
-        for index in plan.ingredientsFirstUsed(inStep: stepIndex) {
-            recipe.setIngredientChecked(index, true)
-        }
         store.saveRecipe(recipe)
         nextTaps += 1
         movingBack = false
         withAnimation(.snappy) {
             stepIndex += 1
-            checkedRows = []
         }
     }
 
@@ -675,45 +671,75 @@ struct CookModeView: View {
             return
         }
         let previous = stepIndex - 1
-        // The step is open again, but what's been added stays checked off
+        // The step is open again
         recipe.setStepCompleted(previous, false)
         store.saveRecipe(recipe)
         movingBack = true
         withAnimation(.snappy) {
             stepIndex = previous
-            checkedRows = []
         }
     }
 
-    /// Swipe left for Next and right for Back, like turning a page
+    /// Swipe left for Next and right for Back, like turning a page: the page
+    /// follows the finger, and goes on off the screen once it's far enough
     private var swipe: some Gesture {
-        DragGesture(minimumDistance: 30)
+        DragGesture(minimumDistance: 15)
+            .onChanged { value in
+                drag.moved()
+                let distance = value.translation.width
+                // Sideways or not is settled at the start, so scrolling a
+                // long step never nudges the page
+                if drag.isSideways == nil {
+                    drag.isSideways = abs(distance) > abs(value.translation.height)
+                    drag.page = pageKey
+                }
+                guard drag.isSideways == true else { return }
+                // With no page that way, it only gives a little
+                drag.offset = distance * (canSwipe(forward: distance < 0) ? 1 : 0.25)
+            }
             .onEnded { value in
                 let distance = value.translation.width
-                let flung = abs(value.predictedEndTranslation.width) > 160
-                guard abs(distance) > abs(value.translation.height) * 1.5,
-                      abs(distance) > 60 || flung else { return }
-                if distance < 0 { swipeForward() } else { swipeBack() }
+                let predicted = value.predictedEndTranslation.width
+                let sideways = drag.isSideways == true
+                drag.isSideways = nil
+                let flung = abs(predicted) > 160 && predicted * distance > 0
+                let forward = distance < 0
+                guard sideways, abs(distance) > 60 || flung, canSwipe(forward: forward) else {
+                    withAnimation(.snappy) { drag.offset = 0 }
+                    return
+                }
+                // Reset only once the old page has finished fading, or it
+                // jumps back to the middle on its way out
+                withAnimation(.snappy, completionCriteria: .removed) {
+                    drag.offset = forward ? -drag.width : drag.width
+                } completion: {
+                    drag.page = nil
+                    drag.offset = 0
+                }
+                if forward { swipeForward() } else { swipeBack() }
             }
     }
 
-    private func swipeForward() {
-        // Marking as cooked stays a deliberate tap
-        if introPage != nil {
-            introNext()
-        } else if !isCooked && !isFinished {
-            advance()
+    /// Whether there's a page to swipe to. Marking as cooked stays a
+    /// deliberate tap.
+    private func canSwipe(forward: Bool) -> Bool {
+        if forward { return introPage != nil || (!isCooked && !isFinished) }
+        switch introPage {
+        case .prep: return true
+        case .overview: return false
+        case nil: return !isCooked
         }
     }
 
+    private func swipeForward() {
+        if introPage != nil { introNext() } else { advance() }
+    }
+
     private func swipeBack() {
-        switch introPage {
-        case .prep:
+        if introPage == .prep {
             withAnimation(.snappy) { introPage = .overview }
-        case .overview:
-            break
-        case nil:
-            if !isCooked { goBack() }
+        } else {
+            goBack()
         }
     }
 
@@ -725,7 +751,6 @@ struct CookModeView: View {
         movingBack = target < stepIndex
         withAnimation(.snappy) {
             stepIndex = target
-            checkedRows = []
         }
     }
 
@@ -898,6 +923,51 @@ struct TimerPillRenderer: TextRenderer {
 /// Holds the screens before step 1 between redraws. Checking things off
 /// changes the recipe but not what these are made from, so they're kept
 /// until the steps, ingredients, prep time or plan change.
+/// A swipe between pages as it happens. Only the page that moves reads
+/// it, so a drag redraws that page rather than all of cook mode.
+@Observable
+final class PageDrag {
+    /// How far the page has followed the finger
+    var offset: CGFloat = 0
+    /// The page being swiped. The page coming in isn't moved with it.
+    var page: String?
+    /// How far a page goes to leave the screen
+    @ObservationIgnored var width: CGFloat = 400
+    @ObservationIgnored var isSideways: Bool?
+    @ObservationIgnored private var lastMoved = Date.distantPast
+
+    func moved() { lastMoved = Date() }
+
+    /// The tap that lifts with a swipe comes in right after its last move
+    var justMoved: Bool { Date().timeIntervalSince(lastMoved) < 0.3 }
+}
+
+extension View {
+    /// Moves with the finger while this page is being swiped, fading a little.
+    func followsSwipe(_ drag: PageDrag, page: String) -> some View {
+        modifier(SwipeFollower(drag: drag, page: page, moves: true))
+    }
+
+    /// Fades while this page is being swiped, staying in place.
+    func fadesWithSwipe(_ drag: PageDrag, page: String) -> some View {
+        modifier(SwipeFollower(drag: drag, page: page, moves: false))
+    }
+}
+
+private struct SwipeFollower: ViewModifier {
+    let drag: PageDrag
+    let page: String
+    let moves: Bool
+
+    func body(content: Content) -> some View {
+        let offset = drag.page == page ? drag.offset : 0
+        let progress = min(abs(offset) / max(drag.width, 1), 1)
+        content
+            .offset(x: moves ? offset : 0)
+            .opacity(1 - progress * (moves ? 0.5 : 0.8))
+    }
+}
+
 private final class IntroCache {
     struct Content {
         let overview: CookOverview

@@ -17,6 +17,7 @@
 		C00C0DE000000000000000A1 /* CookPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B1 /* CookPlanTests.swift */; };
 		C00C0DE000000000000000A2 /* CookPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B2 /* CookPlan.swift */; };
 		C00C0DE000000000000000A3 /* CookIntroTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B3 /* CookIntroTests.swift */; };
+		C00C0DE000000000000000A9 /* RecipeParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B9 /* RecipeParserTests.swift */; };
 		C00C0DE000000000000000A4 /* CookIntro.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00C0DE000000000000000B4 /* CookIntro.swift */; };
 		C0FFEEB100000000000000 /* RecipeCollectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB111111111110000 /* RecipeCollectionTests.swift */; };
 		C0FFEEB200000000000001 /* WeekPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB211111111110001 /* WeekPlanTests.swift */; };
@@ -85,6 +86,7 @@
 		C00C0DE000000000000000B1 /* CookPlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CookPlanTests.swift; sourceTree = "<group>"; };
 		C00C0DE000000000000000B2 /* CookPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CookPlan.swift; path = Cookbook/Services/CookPlan.swift; sourceTree = SOURCE_ROOT; };
 		C00C0DE000000000000000B3 /* CookIntroTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CookIntroTests.swift; sourceTree = "<group>"; };
+		C00C0DE000000000000000B9 /* RecipeParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipeParserTests.swift; sourceTree = "<group>"; };
 		C00C0DE000000000000000B4 /* CookIntro.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CookIntro.swift; path = Cookbook/Services/CookIntro.swift; sourceTree = SOURCE_ROOT; };
 		C0FFEEB111111111110000 /* RecipeCollectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipeCollectionTests.swift; sourceTree = "<group>"; };
 		C0FFEEB211111111110001 /* WeekPlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WeekPlanTests.swift; sourceTree = "<group>"; };
@@ -191,6 +193,7 @@
 				C0FFEEB211111111110001 /* WeekPlanTests.swift */,
 				C00C0DE000000000000000B1 /* CookPlanTests.swift */,
 				C00C0DE000000000000000B3 /* CookIntroTests.swift */,
+				C00C0DE000000000000000B9 /* RecipeParserTests.swift */,
 				E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */,
 			);
 			path = CookbookTests;
@@ -460,6 +463,7 @@
 				C00C0DE000000000000000A1 /* CookPlanTests.swift in Sources */,
 				C00C0DE000000000000000A2 /* CookPlan.swift in Sources */,
 				C00C0DE000000000000000A3 /* CookIntroTests.swift in Sources */,
+				C00C0DE000000000000000A9 /* RecipeParserTests.swift in Sources */,
 				C00C0DE000000000000000A4 /* CookIntro.swift in Sources */,
 				C0FFEEB500000000000004 /* Recipe.swift in Sources */,
 				D65719950EF6A48DF0F78F43 /* CookbookFoldersTests.swift in Sources */,

@@ -465,6 +465,54 @@ final class CookIntroTests: XCTestCase {
         XCTAssertEqual(overview.blocks.filter { $0.lane == 0 }.map(\.word), ["Mix", "Cook"])
     }
 
+    func testOverview_potRoastBakesForHours() {
+        let recipe = Recipe(
+            ingredients: [Ingredient(text: "1 (4 pound) beef chuck roast"), Ingredient(text: "3 yellow onions, thinly sliced")],
+            directions: [
+                Direction(text: "Preheat the oven to 325° F. Season the roast with salt and pepper, then coat with flour.", order: 1),
+                Direction(text: "Arrange the onions and shallots in a large Dutch oven and dot with butter. Set the roast on top. Spread with apple butter. Pour the cider and wine around the roast. Add the carrots and thyme, then arrange the sweet potatoes around and over the roast.", order: 2),
+                Direction(text: "Cover and roast for 2 1/2 to 3 hours, until the beef is fork tender. Remove the sweet potatoes to a baking sheet and increase the oven temperature to 425° F.", order: 3),
+                Direction(text: "Toss the potatoes with the butter, garlic powder, Parmesan, and sage. Roast for 20 minutes, until crisp.", order: 4),
+                Direction(text: "At the same time, return the roast to the oven, uncovered, for 10-15 minutes, until caramelized on top. Add a splash of broth, cider, wine, or water if the pan juices are getting low.", order: 5),
+                Direction(text: "Spoon the onions and gravy over the roast. Finish with fresh thyme and flaky sea salt. Serve with the crispy sweet potatoes and sage, spooning the browned butter from the baking sheet over the potatoes.", order: 6)
+            ],
+            prepDuration: 30 * 60
+        )
+        let overview = CookIntroPlanner.overview(for: recipe, plan: CookPlanner.heuristicPlan(for: recipe))
+        XCTAssertEqual(overview.blocks.filter { $0.lane == 0 }.map(\.word), ["Prep", "Assemble", "Bake", "Serve"],
+                       "seasoning the roast is prep, not a bake")
+        XCTAssertEqual(overview.blocks.first { $0.step == 4 }?.kind, .alongside, "\"At the same time\" runs beside the potatoes")
+        XCTAssertEqual(overview.blocks.first { $0.step == 4 }?.word, "Bake", "back to the oven is baking")
+        XCTAssertEqual(overview.totalLabel, "About 3 hr 40 min")
+        let bake = overview.blocks.first { $0.word == "Bake" && $0.lane == 0 }
+        XCTAssertTrue(bake?.timeLabel.contains("hr") ?? false, "a long bake reads in hours: \(bake?.timeLabel ?? "")")
+    }
+
+    func testTimeLabel_hoursAndMinutes() {
+        XCTAssertEqual(CookIntroPlanner.timeLabel(45), "45 min")
+        XCTAssertEqual(CookIntroPlanner.timeLabel(60), "1 hr")
+        XCTAssertEqual(CookIntroPlanner.timeLabel(75, estimated: true), "~1 hr 15 min")
+        XCTAssertEqual(CookIntroPlanner.timeLabel(20, to: 25), "20–25 min")
+        XCTAssertEqual(CookIntroPlanner.timeLabel(360, to: 480), "6–8 hr")
+        XCTAssertEqual(CookIntroPlanner.timeLabel(150, to: 180), "2 hr 30 min–3 hr")
+        XCTAssertEqual(CookIntroPlanner.timeLabel(45, to: 90), "45 min–1 hr 30 min")
+    }
+
+    func testStepTiming_longTimesInHoursAndMinutes() {
+        XCTAssertEqual(CookIntroPlanner.stepTiming("Bake for 90 minutes.").label, "1 hr 30 min")
+        XCTAssertEqual(CookIntroPlanner.stepTiming("Cover and roast for 2 1/2 to 3 hours.").label, "2 hr 30 min–3 hr")
+        XCTAssertEqual(CookIntroPlanner.stepTiming("Simmer for 2½ minutes.").label, "2½ min", "under an hour keeps the recipe's words")
+    }
+
+    func testStepTiming_anAlternativeIsntAddedOn() {
+        let timing = CookIntroPlanner.stepTiming("Cover and cook on LOW for 6-8 hours or HIGH for 3-4 hours, until the beef is fork tender.")
+        XCTAssertEqual(timing.low, 360)
+        XCTAssertEqual(timing.high, 480)
+        XCTAssertEqual(timing.label, "6–8 hr")
+        let both = CookIntroPlanner.stepTiming("Simmer for 10 minutes, or until thick, then rest 5 minutes.")
+        XCTAssertEqual(both.low, 15, "\"or until\" isn't another time")
+    }
+
     func testOverview_backToBackStepsInTheSameStageAreOneBlock() {
         let overview = CookIntroPlanner.overview(for: soup, plan: CookPlanner.heuristicPlan(for: soup))
         let main = overview.blocks.filter { $0.kind == .cook }

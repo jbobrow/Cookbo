@@ -65,36 +65,43 @@ function extractRecipe(dict, sourceURL) {
     .map((i) => stripLeadingBullets(stripHTML(i)))
     .filter(Boolean);
 
+  const { steps, otherMethods } = extractSteps(dict.recipeInstructions);
+  const description = stripHTML(typeof dict.description === 'string' ? dict.description : '');
+
   return {
     title: stripHTML(typeof dict.name === 'string' ? dict.name : ''),
     image: extractImage(dict.image, sourceURL),
     ingredients,
-    steps: extractSteps(dict.recipeInstructions),
+    steps,
     prepMinutes: minutes(dict.prepTime),
     cookMinutes: minutes(dict.cookTime),
     totalMinutes: minutes(dict.totalTime),
     yield: extractYield(dict.recipeYield),
-    // The app saves this as the recipe's Notes
-    notes: stripHTML(typeof dict.description === 'string' ? dict.description : ''),
+    // The app saves this as the recipe's Notes, along with any other way
+    // to make it ("The Crockpot")
+    notes: [description, ...otherMethods].filter(Boolean).join('\n\n'),
     source: hostname(sourceURL),
     sourceURL,
   };
 }
 
 function extractSteps(instructions) {
-  if (!instructions) return [];
+  if (!instructions) return { steps: [], otherMethods: [] };
 
   if (typeof instructions === 'string') {
     const withBreaks = instructions
       .replace(/<\/(?:p|li|div)>/gi, '\n')
       .replace(/<br\s*\/?>/gi, '\n');
-    return stripHTML(withBreaks, { keepNewlines: true })
+    const steps = stripHTML(withBreaks, { keepNewlines: true })
       .split('\n')
       .map((s) => s.trim())
       .filter(Boolean);
+    return { steps, otherMethods: [] };
   }
 
   const steps = [];
+  // The same dish made another way ("The Crockpot"), kept for the notes
+  const otherMethods = [];
   for (const step of asArray(instructions)) {
     if (typeof step === 'string') {
       steps.push(step);
@@ -103,17 +110,53 @@ function extractSteps(instructions) {
         steps.push(step.text);
       } else if (Array.isArray(step.itemListElement)) {
         // HowToSection (or a bare list): flatten its HowToSteps
+        const sectionSteps = [];
         for (const item of step.itemListElement) {
-          if (typeof item === 'string') steps.push(item);
-          else if (item?.text) steps.push(item.text);
-          else if (item?.name) steps.push(item.name);
+          if (typeof item === 'string') sectionSteps.push(item);
+          else if (item?.text) sectionSteps.push(item.text);
+          else if (item?.name) sectionSteps.push(item.name);
+        }
+        // Another way to make it doesn't come after the first
+        const sectionName = stripHTML(typeof step.name === 'string' ? step.name : '');
+        if (steps.length > 0 && isOtherMethod(sectionName)) {
+          const numbered = splitNumberedSteps(sectionSteps.map((s) => stripHTML(s)).filter(Boolean))
+            .map((s, i) => `${i + 1}. ${s}`);
+          otherMethods.push([sectionName, ...numbered].join('\n'));
+        } else {
+          steps.push(...sectionSteps);
         }
       } else if (typeof step.name === 'string' && step.name) {
         steps.push(step.name);
       }
     }
   }
-  return steps.map((s) => stripHTML(s)).filter(Boolean);
+  return { steps: splitNumberedSteps(steps.map((s) => stripHTML(s)).filter(Boolean)), otherMethods };
+}
+
+/** A section that makes the same dish another way: "The Crockpot", "Instant Pot", "Stovetop Method". */
+export function isOtherMethod(sectionName) {
+  return /\b(crock-?\s?pot|slow[- ]?cooker|instant\s?pot|pressure[- ]?cooker|multi-?cooker|air[- ]?fryer)\b|\b(stove-?\s?top|oven|grill)\s+(method|version|directions|instructions)\b/i.test(sectionName);
+}
+
+/**
+ * Some sites publish a whole method as one step, numbered inline: "1. Preheat
+ * the oven to 325° F.2. Arrange the onions…". Each number becomes its own
+ * step, but only when they count up 1, 2, 3… from the very start, so a stray
+ * "2." in the middle of a step never splits it.
+ */
+export function splitNumberedSteps(steps) {
+  return steps.flatMap((step) => {
+    const text = step.trim();
+    const picked = [];
+    for (const match of text.matchAll(/(?:^|(?<=[\s.!?)]))(\d{1,2})\.\s+(?=\p{L})/gu)) {
+      if (picked.length === 0 && match.index !== 0) break;
+      if (Number(match[1]) === picked.length + 1) picked.push({ start: match.index, end: match.index + match[0].length });
+    }
+    if (picked.length < 2) return [step];
+    return picked
+      .map((p, i) => text.slice(p.end, i + 1 < picked.length ? picked[i + 1].start : text.length).trim())
+      .filter(Boolean);
+  });
 }
 
 function extractImage(image, sourceURL) {
