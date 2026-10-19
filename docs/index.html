@@ -104,14 +104,42 @@
 
     .produce .item + .item { margin-left: -.1em; }
 
-    /* Click a piece and it rocks where it sits. Once landed, the drop is switched off
-       so it can't replay when a rock ends. */
+    /* Brush past a piece and it rocks where it sits; click it and it hops, bounces and
+       then rocks. Once landed, the drop is switched off so it can't replay when a rock ends. */
     .produce { -webkit-user-select: none; user-select: none; }
     .produce .item { cursor: pointer; -webkit-tap-highlight-color: transparent; }
     .produce .item.landed { animation: none; }
     .produce .item.rocking { animation: rock var(--rock-time, .8s) cubic-bezier(.3, .6, .4, 1); }
+    .produce .item.hopping { animation: hop var(--hop-time, .8s) both; }
 
-    /* --push is the side you clicked; --swing scales the rock, varied on each click */
+    /* A crouch, a hop that leans away from where you clicked, a squashed landing and
+       one small bounce; the rock follows on from here */
+    @keyframes hop {
+      0% {
+        transform: translateY(0) rotate(var(--rest));
+        animation-timing-function: cubic-bezier(.3, 0, .6, 1);
+      }
+      12% {
+        transform: translateY(0) rotate(var(--rest)) scale(1.1, .86);
+        animation-timing-function: cubic-bezier(.2, .7, .4, 1);
+      }
+      42% {
+        transform: translateY(calc(-.5em * var(--height, 1))) rotate(calc(var(--rest) + 12deg * var(--push, 1))) scale(.95, 1.07);
+        animation-timing-function: cubic-bezier(.5, 0, 1, .55);
+      }
+      68% {
+        transform: translateY(0) rotate(calc(var(--rest) + 4deg * var(--push, 1))) scale(1.12, .82);
+        animation-timing-function: cubic-bezier(.2, .7, .4, 1);
+      }
+      82% {
+        transform: translateY(-12%) rotate(var(--rest)) scale(.97, 1.04);
+        animation-timing-function: cubic-bezier(.5, 0, 1, .6);
+      }
+      92% { transform: translateY(0) rotate(var(--rest)) scale(1.04, .96); }
+      100% { transform: translateY(0) rotate(var(--rest)); }
+    }
+
+    /* --push is the way the cursor was heading; --swing scales the rock, varied each time */
     @keyframes rock {
       0%   { transform: rotate(var(--rest)); }
       18%  { transform: rotate(calc(var(--rest) + 9deg * var(--push, 1) * var(--swing, 1))); }
@@ -858,26 +886,56 @@
       place('.produce.left', pick(), ['.30s', '.16s', '.04s']);
       place('.produce.right', pick(), ['.10s', '.24s', '.36s']);
 
-      // Click a piece to rock it. It tips toward the side you clicked first, like a poke.
-      // Clicks wait until it has landed; with reduced motion it never drops, so never rocks.
+      // Pass the cursor over a piece to rock it. It tips the way the cursor was heading,
+      // as if brushed. A tap does the same on touch. Waits until the piece has landed;
+      // with reduced motion it never drops, so never rocks.
+      // No two rocks alike, and the long pieces rock a little less and a little slower, as if heavier
+      const rock = (item, boost = 1) => {
+        const heavy = LONG.includes(kind(item));
+        item.style.setProperty('--swing', ((0.55 + Math.random() * 0.8) * (heavy ? 0.75 : 1) * boost).toFixed(2));
+        item.style.setProperty('--rock-time', `${((0.6 + Math.random() * 0.45) * (heavy ? 1.2 : 1)).toFixed(2)}s`);
+        item.classList.add('rocking');
+      };
+
+      let lastX;
+      addEventListener('pointermove', (event) => { lastX = event.clientX; }, { passive: true });
       for (const side of document.querySelectorAll('.produce')) {
         side.addEventListener('animationend', (event) => {
           const item = event.target.closest('.item');
           if (event.animationName === 'drop') item?.classList.add('landed');
           if (event.animationName === 'rock') item?.classList.remove('rocking');
+          if (event.animationName === 'hop') {
+            item.classList.remove('hopping');
+            rock(item, 1.3);
+          }
         });
-        side.addEventListener('click', (event) => {
+        side.addEventListener('pointerover', (event) => {
           const item = event.target.closest('.item');
           if (!item?.classList.contains('landed')) return;
+          if (item.contains(event.relatedTarget)) return; // moving within the same piece
+          // Let a rock or a hop play out rather than snapping it back mid-swing
+          if (item.classList.contains('rocking') || item.classList.contains('hopping')) return;
+          // Heading: from the last move if we have one, else from which half it came in on
           const box = item.getBoundingClientRect();
-          item.style.setProperty('--push', event.clientX < box.left + box.width / 2 ? -1 : 1);
-          // No two rocks alike, and the long pieces rock a little less and a little slower, as if heavier
+          const dx = lastX === undefined || lastX === event.clientX
+            ? box.left + box.width / 2 - event.clientX
+            : event.clientX - lastX;
+          item.style.setProperty('--push', dx < 0 ? -1 : 1);
+          rock(item);
+        });
+
+        // Click a piece and it hops up, bounces down and rocks. It leans away from the
+        // side you clicked, like a flick. Long pieces hop lower and a touch slower.
+        side.addEventListener('click', (event) => {
+          const item = event.target.closest('.item');
+          if (!item?.classList.contains('landed') || item.classList.contains('hopping')) return;
+          const box = item.getBoundingClientRect();
+          item.style.setProperty('--push', event.clientX < box.left + box.width / 2 ? 1 : -1);
           const heavy = LONG.includes(kind(item));
-          item.style.setProperty('--swing', ((0.55 + Math.random() * 0.8) * (heavy ? 0.75 : 1)).toFixed(2));
-          item.style.setProperty('--rock-time', `${((0.6 + Math.random() * 0.45) * (heavy ? 1.2 : 1)).toFixed(2)}s`);
+          item.style.setProperty('--height', ((0.85 + Math.random() * 0.4) * (heavy ? 0.7 : 1)).toFixed(2));
+          item.style.setProperty('--hop-time', `${((0.7 + Math.random() * 0.15) * (heavy ? 1.1 : 1)).toFixed(2)}s`);
           item.classList.remove('rocking');
-          void item.getBoundingClientRect(); // restart if it's already mid-rock
-          item.classList.add('rocking');
+          item.classList.add('hopping');
         });
       }
     })();
