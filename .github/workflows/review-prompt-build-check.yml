@@ -1,0 +1,30 @@
+name: Review prompt build check
+on:
+  push:
+    branches: [review-prompt]
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app || true; xcodebuild -version
+      - name: List
+        run: xcodebuild -list -project Cookbook.xcodeproj
+      - name: Build iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild build -project Cookbook.xcodeproj -scheme Cookbook \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO 2>&1 | tee ios.log
+      - name: Build macOS
+        if: always()
+        run: |
+          set -o pipefail
+          xcodebuild build -project Cookbook.xcodeproj -scheme Cookbook \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO 2>&1 | tee mac.log
+      - name: Warnings in touched files
+        if: always()
+        run: |
+          grep -h "warning:" ios.log mac.log | grep -E "ReviewPrompter|CookModeView|RecipeDetailView|ImportRecipeFromURLView|CookbookApp" | sort -u || echo "none"

@@ -36,6 +36,7 @@ struct CookbookApp: App {
         WindowGroup {
             RecipeListView()
                 .environmentObject(recipeStore)
+                .tracksReviewEligibility()
                 #if os(macOS)
                 .preferredColorScheme(appearanceMode.colorScheme)
                 .environment(\.textSizeMultiplier, textSizeMultiplier)

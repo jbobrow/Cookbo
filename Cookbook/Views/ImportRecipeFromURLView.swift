@@ -392,6 +392,8 @@ struct ImportRecipeFromURLView: View {
             }
         }
 
+        // Asks after a pause, once the sheet has gone
+        ReviewPrompter.shared.recordSignificantEvent(promptIfAppropriate: true)
         dismiss()
     }
 
