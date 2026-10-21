@@ -189,6 +189,11 @@ struct CookModeView: View {
             UIApplication.shared.isIdleTimerDisabled = false
             releaseOrientation()
             #endif
+            // Cooked it, and back on the recipe page with no timers left
+            // going: a good moment to ask for a review
+            if isCooked, timerStore.timers.isEmpty {
+                ReviewPrompter.shared.requestReviewIfAppropriate()
+            }
         }
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
@@ -839,6 +844,7 @@ struct CookModeView: View {
 
     private func markCooked() {
         recipe = store.markCooked(recipe)
+        ReviewPrompter.shared.recordSignificantEvent(weight: 2)
         withAnimation(.spring(duration: 0.4)) { isCooked = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { close() }
     }

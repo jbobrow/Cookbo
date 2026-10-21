@@ -579,6 +579,8 @@ struct RecipeDetailView: View {
 
         // Record cooked date, reset checkmarks, and save
         recipe = store.markCooked(recipe)
+        ReviewPrompter.shared.recordSignificantEvent(
+            weight: 2, promptIfAppropriate: CookTimerStore.shared.timers.isEmpty)
 
         // Show confirmation toast
         withAnimation(.spring(duration: 0.4)) {
