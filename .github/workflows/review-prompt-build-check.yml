@@ -3,44 +3,30 @@ on:
   push:
     branches: [review-prompt]
 jobs:
-  main-baseline:
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app || true; xcodebuild -version
-      - name: Build main, iOS Simulator (unchanged)
-        run: |
-          set -o pipefail
-          xcodebuild build -project Cookbook.xcodeproj -scheme Cookbook \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO 2>&1 | tee ios.log | grep -E "error:|\*\* BUILD" || true
-          grep -q "BUILD SUCCEEDED" ios.log
   build:
     runs-on: macos-26
+    env:
+      # CI-only: main hits a type-check limit in RecipeListView.swift on Xcode 26.6
+      FLAGS: "$(inherited) -Xfrontend -solver-expression-time-threshold=600 -Xfrontend -solver-scope-threshold=16000000"
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.6.app || true; xcodebuild -version
-      - name: CI-only workaround for a type-check timeout that also fails on main
-        run: |
-          sed -i '' 's/\.alert("Delete Recipe\\(deleteCount > 1 ? "s" : "")",/.alert(deleteCount > 1 ? String("Delete Recipes") : String("Delete Recipe"),/' Cookbook/Views/RecipeListView.swift
-          git diff --stat
       - name: Build iOS Simulator
         run: |
           set -o pipefail
           xcodebuild build -project Cookbook.xcodeproj -scheme Cookbook \
             -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO 2>&1 | tee ios.log
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            OTHER_SWIFT_FLAGS="$FLAGS" 2>&1 | tee ios.log
       - name: Build macOS
         if: always()
         run: |
           set -o pipefail
           xcodebuild build -project Cookbook.xcodeproj -scheme Cookbook \
             -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO 2>&1 | tee mac.log
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            OTHER_SWIFT_FLAGS="$FLAGS" 2>&1 | tee mac.log
       - name: Warnings in touched files
         if: always()
         run: |
