@@ -7,7 +7,7 @@ jobs:
     runs-on: macos-26
     env:
       # CI-only: main hits a type-check limit in RecipeListView.swift on Xcode 26.6
-      FLAGS: "$(inherited) -Xfrontend -solver-expression-time-threshold=600 -Xfrontend -solver-scope-threshold=16000000"
+      FLAGS: "$(inherited) -Xfrontend -solver-expression-time-threshold=600 -Xfrontend -solver-scope-threshold=16000000 -Xfrontend -solver-memory-threshold=3000000000 -Xfrontend -solver-trail-threshold=1000000000"
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
