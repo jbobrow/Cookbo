@@ -123,13 +123,18 @@ struct RecipeParserCore {
     }
 
     /// Extracts the canonical Instagram post/reel URL by stripping tracking parameters.
-    private static func cleanInstagramURL(_ urlString: String) -> String {
+    /// Also rewrites `/reels/<id>/` to `/reel/<id>/`: the plural form serves a page
+    /// with no caption metadata, and oEmbed rejects it outright.
+    static func cleanInstagramURL(_ urlString: String) -> String {
         guard let url = URL(string: urlString),
               var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return urlString
         }
         components.queryItems = nil
         components.fragment = nil
+        components.path = components.path.replacingOccurrences(
+            of: #"^/reels/([^/]+)"#, with: "/reel/$1", options: .regularExpression
+        )
         return components.url?.absoluteString ?? urlString
     }
 
@@ -398,6 +403,9 @@ struct RecipeParserCore {
         var text = caption
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
+            // Instagram's editor inserts U+2028 LINE SEPARATOR for soft returns
+            .replacingOccurrences(of: "\u{2028}", with: "\n")
+            .replacingOccurrences(of: "\u{2029}", with: "\n")
 
         // Replace inline bullet separators with newlines
         // ■ (U+25A0 BLACK SQUARE) is used by many Instagram recipe accounts (e.g. @maxiskitchen)
@@ -532,11 +540,21 @@ struct RecipeParserCore {
             "nutrition", "storage", "substitutions"
         ]
 
-        /// Strips emoji and punctuation to get the keyword core of a potential header.
+        /// Strips emoji, punctuation and parenthetical qualifiers to get the keyword
+        /// core of a potential header, e.g. "Ingredients (serves 2–3)" → "ingredients".
         func headerKeyword(_ line: String) -> String {
             line.lowercased()
+                .replacingOccurrences(of: #"\([^)]*\)"#, with: " ", options: .regularExpression)
                 .trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
                 .trimmingCharacters(in: .whitespaces)
+        }
+
+        /// The yield in a header's parenthetical, e.g. "Serves 2–3" from "Ingredients (serves 2–3)".
+        func headerYield(_ header: String) -> String? {
+            guard let range = header.range(of: #"\(\s*(?:serves|serving|makes|yields?)\b[^)]*\)"#,
+                                           options: [.regularExpression, .caseInsensitive]) else { return nil }
+            let text = header[range].dropFirst().dropLast().trimmingCharacters(in: .whitespaces)
+            return text.prefix(1).uppercased() + text.dropFirst()
         }
 
         for line in lines {
@@ -547,6 +565,7 @@ struct RecipeParserCore {
             let keyword = headerKeyword(stripped)
             if ingredientHeaders.contains(keyword) {
                 flushGroup(&currentGroupName, &currentGroupItems, &groups)
+                if let yield = headerYield(stripped) { noteLines.append(yield) }
                 currentSection = .ingredients
                 continue
             }
@@ -563,10 +582,17 @@ struct RecipeParserCore {
 
             // ── Detect "Header: first-item" — header keyword and content on the same line ──
             // e.g. "Ingredients: 1 tsp yeast" (after bullet-splitting) or "Instructions: Mix..."
-            let strippedLower = stripped.lowercased()
+            // A qualifier between header and colon is dropped: "Ingredients (serves 4): …"
+            let headerLine = stripped.replacingOccurrences(
+                of: #"^([^(:]{1,30}?)\s*\([^)]*\)\s*:"#, with: "$1:", options: .regularExpression
+            )
+            let strippedLower = headerLine.lowercased()
             if let match = ingredientHeaders.first(where: { strippedLower.hasPrefix($0 + ":") }) {
-                let rest = String(stripped.dropFirst(match.count + 1)).trimmingCharacters(in: .whitespaces)
+                let rest = String(headerLine.dropFirst(match.count + 1)).trimmingCharacters(in: .whitespaces)
                 flushGroup(&currentGroupName, &currentGroupItems, &groups)
+                if let yield = headerYield(String(stripped.prefix(while: { $0 != ":" }))) {
+                    noteLines.append(yield)
+                }
                 currentSection = .ingredients
                 let cleaned = stripLeadingBullets(rest)
                     .trimmingCharacters(in: CharacterSet(charactersIn: "-–•*▪️✅☑️🟢▫️◾◽"))
@@ -575,7 +601,7 @@ struct RecipeParserCore {
                 continue
             }
             if let match = directionHeaders.first(where: { strippedLower.hasPrefix($0 + ":") }) {
-                let rest = String(stripped.dropFirst(match.count + 1)).trimmingCharacters(in: .whitespaces)
+                let rest = String(headerLine.dropFirst(match.count + 1)).trimmingCharacters(in: .whitespaces)
                 flushGroup(&currentGroupName, &currentGroupItems, &groups)
                 currentSection = .directions
                 let dirText = stripDirectionPrefix(rest)
@@ -583,7 +609,7 @@ struct RecipeParserCore {
                 continue
             }
             if let match = noteHeaders.first(where: { strippedLower.hasPrefix($0 + ":") }) {
-                let rest = String(stripped.dropFirst(match.count + 1)).trimmingCharacters(in: .whitespaces)
+                let rest = String(headerLine.dropFirst(match.count + 1)).trimmingCharacters(in: .whitespaces)
                 flushGroup(&currentGroupName, &currentGroupItems, &groups)
                 currentSection = .notes
                 if !rest.isEmpty { noteLines.append(rest) }
@@ -660,6 +686,9 @@ struct RecipeParserCore {
             // ── Accumulate into the current section ──
             switch currentSection {
             case .preamble:
+                // "Full recipe below 👇" points at the caption; it isn't a title
+                let leadIn = #"^(?:full |the )?recipes?(?: (?:and|&) (?:ingredients|method|instructions))?(?: (?:is )?(?:below|in (?:the )?caption))$"#
+                if keyword.range(of: leadIn, options: .regularExpression) != nil { continue }
                 preambleLines.append(stripped)
             case .ingredients:
                 let cleaned = stripLeadingBullets(stripped)
@@ -683,7 +712,16 @@ struct RecipeParserCore {
         flushGroup(&currentGroupName, &currentGroupItems, &groups)
 
         // ── Title ──
-        if let first = preambleLines.first {
+        // A caption that opens with prose ("Pasta alla Norcina is a regional dish…")
+        // names the dish before the verb; the full sentence stays as a note.
+        var preambleNoteStart = 1
+        if let first = preambleLines.first, first.count > 60,
+           let match = first.range(of: #"^(?!(?i:this|that|it|here|there|these|those|today|my|our|the|so|ok|okay)\b).{3,40}?(?= (?:is|are) (?:a|an|the|my|our|one)\b)"#,
+                                   options: .regularExpression),
+           first[match].split(separator: " ").count <= 6 {
+            result.title = String(first[match])
+            preambleNoteStart = 0
+        } else if let first = preambleLines.first {
             result.title = removeHashtags(first)
                 // Strip trailing decorative emoji
                 .trimmingCharacters(in: CharacterSet(charactersIn: "✨🔥💫⭐🍴🥘🍳"))
@@ -697,8 +735,8 @@ struct RecipeParserCore {
         }
 
         // Remaining preamble lines → notes
-        if preambleLines.count > 1 {
-            let extra = preambleLines.dropFirst().filter { !isHashtagLine($0) }
+        if preambleLines.count > preambleNoteStart {
+            let extra = preambleLines.dropFirst(preambleNoteStart).filter { !isHashtagLine($0) }
             if !extra.isEmpty { noteLines.insert(contentsOf: extra, at: 0) }
         }
 

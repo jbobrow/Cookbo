@@ -164,6 +164,98 @@ final class InstagramParserTests: XCTestCase {
         XCTAssertFalse(allText.contains("#"), "Hashtags should be filtered")
     }
 
+    // MARK: - @aldentedreams soft-return format (DfKLSAqxMDp — Pasta alla Norcina)
+
+    // Real caption from the live page: a "Full recipe below 👇" lead-in, a prose
+    // opener, a header with a yield qualifier, and • bullets joined by U+2028
+    // LINE SEPARATOR (Instagram's soft return) rather than newlines.
+    static let aldenteDreamsCaption = """
+        Full recipe below 👇
+
+        Pasta alla Norcina is a regional dish from Umbria where they use local pork sausage, pecorino, and cream. This version layers mushrooms three ways: Crimini , porcini broth, and porcini powder, all with savory sausage in a creamy pecorino sauce.
+
+        Ingredients (serves 2–3)
+        • 250 g rigatoni\u{2028}• 25 g dried porcini, split in half\u{2028}• 1 cup hot water\u{2028}• 250 g Italian sausage, casings removed\u{2028}• 200 g fresh mushrooms, sliced\u{2028}• 1 shallot, finely chopped\u{2028}• 2–3 cloves garlic\u{2028}• ½ cup white wine\u{2028}• ¾ cup heavy cream\u{2028}• 1 cup finely grated pecorino, plus extra to finish\u{2028}• Fresh nutmeg\u{2028}• Olive oil\u{2028}• Salt & black pepper
+        Method
+        1. Soak half the dried porcini in hot water for 20 minutes to make a porcini broth, then strain well.
+        2. Blitz the other half of the porcini into a fine powder and set aside.
+        3. Lightly fry the sausage in a pan, then remove.
+        4. In the same pan, cook the fresh mushrooms until soft.
+        5. Add the sausage back in, then the garlic and shallots.
+        6. Deglaze with white wine, then add the porcini broth and heavy cream.
+        7. Grate in nutmeg, add the pecorino and porcini powder, and stir until smooth.
+        8. Toss in the cooked rigatoni, loosening with pasta water if needed.
+        9. Finish with more pecorino.
+
+        #pastarecipe #explore #pasta
+        """
+
+    func testAldenteDreams_ingredients() {
+        let result = RecipeParserCore.parseInstagramCaption(Self.aldenteDreamsCaption)
+        XCTAssertEqual(result.ingredientGroups.count, 1)
+        let items = result.ingredientGroups.first?.ingredients ?? []
+        XCTAssertEqual(items.count, 13)
+        XCTAssertEqual(items.first, "250 g rigatoni")
+        XCTAssertEqual(items.last, "Salt & black pepper")
+        XCTAssertFalse(items.contains { $0.contains("\u{2028}") }, "Soft returns should split items")
+    }
+
+    func testAldenteDreams_directions() {
+        let result = RecipeParserCore.parseInstagramCaption(Self.aldenteDreamsCaption)
+        XCTAssertEqual(result.directions.count, 9)
+        XCTAssertEqual(result.directions.first?.hasPrefix("Soak half"), true)
+    }
+
+    func testAldenteDreams_titleSkipsLeadIn() {
+        let result = RecipeParserCore.parseInstagramCaption(Self.aldenteDreamsCaption)
+        XCTAssertEqual(result.title, "Pasta alla Norcina")
+    }
+
+    func testAldenteDreams_notesKeepDescriptionAndYield() {
+        let result = RecipeParserCore.parseInstagramCaption(Self.aldenteDreamsCaption)
+        XCTAssertTrue(result.notes.hasPrefix("Pasta alla Norcina is a regional dish"))
+        XCTAssertTrue(result.notes.contains("Serves 2–3"))
+        XCTAssertFalse(result.notes.contains("250 g rigatoni"), "Ingredients must not fall into notes")
+    }
+
+    func testProseOpenerWithPronounKeepsWholeLine() {
+        let result = RecipeParserCore.parseInstagramCaption("""
+            This is the best chocolate cake I have ever made and it comes together in one bowl
+
+            Ingredients:
+            • 2 cups flour
+            """)
+        XCTAssertTrue(result.title.hasPrefix("This is the best chocolate cake"))
+    }
+
+    func testInlineHeaderWithQualifier() {
+        let result = RecipeParserCore.parseInstagramCaption("""
+            Lemon bars
+
+            Ingredients (makes 16): 1 cup flour • 2 eggs
+            Method (30 min): Mix everything.
+            """)
+        XCTAssertEqual(result.ingredientGroups.first?.ingredients, ["1 cup flour", "2 eggs"])
+        XCTAssertEqual(result.directions, ["Mix everything."])
+        XCTAssertTrue(result.notes.contains("Makes 16"))
+    }
+
+    // MARK: - cleanInstagramURL
+
+    func testCleanURL_reelsPluralBecomesReel() {
+        XCTAssertEqual(
+            RecipeParserCore.cleanInstagramURL("https://www.instagram.com/reels/DfKLSAqxMDp/?igsh=abc"),
+            "https://www.instagram.com/reel/DfKLSAqxMDp/"
+        )
+    }
+
+    func testCleanURL_reelsFeedLeftAlone() {
+        XCTAssertEqual(
+            RecipeParserCore.cleanInstagramURL("https://www.instagram.com/reels/"),
+            "https://www.instagram.com/reels/"
+        )
+    }
+
     // MARK: - Live network tests (hit the real Instagram oEmbed API)
     //
     // These print the raw caption and parsed result so you can see exactly what
@@ -208,6 +300,23 @@ final class InstagramParserTests: XCTestCase {
             parsed.ingredientGroups.isEmpty && parsed.directions.isEmpty,
             "Should parse recipe content.\nRaw caption:\n\(caption)"
         )
+    }
+
+    func testLivePage_DfKLSAqxMDp_reelsLink() async throws {
+        // Shared as a /reels/ link, which only has the caption once rewritten to /reel/
+        let url = RecipeParserCore.cleanInstagramURL("https://www.instagram.com/reels/DfKLSAqxMDp/")
+        var request = URLRequest(url: try XCTUnwrap(URL(string: url)))
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let html = String(data: data, encoding: .utf8) ?? ""
+
+        let parsed = try XCTUnwrap(RecipeParserCore.parseInstagramPage(html: html, sourceURL: url))
+        print("\n=== DfKLSAqxMDp (@aldentedreams — Pasta alla Norcina) ===")
+        print("  title: \(parsed.title)")
+        print("  ingredients: \(parsed.ingredients)")
+        XCTAssertEqual(parsed.ingredients.count, 13)
+        XCTAssertEqual(parsed.directions.count, 9)
     }
 
     // MARK: - Image debugging
