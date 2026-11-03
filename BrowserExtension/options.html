@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Save to Cookbo</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { font-size: 17px; line-height: 1.45; }
+    .page { max-width: 520px; margin: 0 auto; padding: 48px 16px; }
+    .header { font-size: 21px; gap: 12px; }
+    .header img { width: 40px; height: 40px; box-shadow: 0 2px 6px rgba(22, 23, 27, 0.14); }
+    ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    .card { margin-top: 24px; padding: 18px; background: var(--card); border-radius: 16px; }
+    .card p { margin: 0 0 14px; }
+    .card p:last-child { margin-bottom: 0; }
+    ul.cookbooks { margin: 0 0 14px; padding-left: 20px; }
+    .button { width: auto; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header"><img src="icon-48.png" alt="">Save to Cookbo</div>
+
+    <section id="native" hidden>
+      <p>Safari saves recipes straight into Cookbo’s iCloud folder, so there’s nothing to set up. On a recipe page, click the Cookbo button in the toolbar.</p>
+    </section>
+
+    <section id="picker" hidden>
+      <p>Recipes save as files in Cookbo’s iCloud Drive folder, where the app finds them on all your devices. Chrome needs to be shown that folder once:</p>
+      <ol>
+        <li>Click <b>Choose Folder…</b></li>
+        <li>In the sidebar, pick <b>iCloud Drive</b>, then select the <b>Cookbo</b> folder.</li>
+        <li>Click <b>Select</b>, then allow Chrome to edit files there.</li>
+      </ol>
+
+      <div class="card">
+        <p id="status" class="muted">No folder chosen yet.</p>
+        <ul class="cookbooks" id="cookbooks" hidden></ul>
+        <p id="error" class="error" hidden></p>
+        <p><button class="button" id="choose">Choose Folder…</button></p>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>

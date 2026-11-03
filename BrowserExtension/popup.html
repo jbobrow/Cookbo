@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Save to Cookbo</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { width: 320px; padding: 14px; }
+    /* Safari on iPhone and iPad shows the popup as a sheet, as wide as it is */
+    @media (pointer: coarse) { body { width: auto; } }
+
+    main, #found { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    main { margin-top: 12px; }
+
+    .recipe {
+      background: var(--card);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(22, 23, 27, 0.08);
+    }
+    .recipe img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: var(--line); }
+    .recipe .text { padding: 10px 12px 12px; }
+    .recipe h1 { margin: 0; font-size: 17px; line-height: 1.2; letter-spacing: -0.2px; }
+    .recipe p { margin: 4px 0 0; font-size: 13px; }
+
+    label { display: grid; gap: 4px; font-size: 13px; }
+    select {
+      font: inherit;
+      font-size: 15px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      color: var(--ink);
+    }
+
+    .message { margin: 0; text-align: center; }
+    .saved { font-weight: 700; text-align: center; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="header"><img src="icon-48.png" alt="">Save to Cookbo</div>
+
+  <main>
+    <p class="message muted" id="loading">Looking for a recipe…</p>
+
+    <section id="setup" hidden>
+      <p class="message">Choose your Cookbo folder in iCloud Drive once, and recipes save straight into it.</p>
+      <p><button class="button" id="choose-folder">Choose Folder…</button></p>
+    </section>
+
+    <section id="none" hidden>
+      <p class="message">No recipe found on this page.</p>
+      <p class="message muted" style="font-size:13px">The Cookbo app reads more kinds of pages, like Instagram posts.</p>
+      <p><a class="button secondary" id="open-app" href="#">Open in Cookbo</a></p>
+    </section>
+
+    <section id="found" hidden>
+      <article class="recipe">
+        <img id="photo" alt="" hidden>
+        <div class="text">
+          <h1 id="title"></h1>
+          <p class="muted" id="summary"></p>
+        </div>
+      </article>
+
+      <label id="cookbook-label">
+        <span class="muted">Cookbook</span>
+        <select id="cookbook"></select>
+      </label>
+
+      <button class="button" id="save">Save Recipe</button>
+      <p class="saved" id="saved" hidden></p>
+      <p class="message error" id="error" hidden></p>
+    </section>
+  </main>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
