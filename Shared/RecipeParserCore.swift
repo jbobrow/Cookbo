@@ -872,7 +872,11 @@ struct RecipeParserCore {
         guard isRecipe else { return nil }
 
         let title = dict["name"] as? String ?? ""
-        let ingredients = (dict["recipeIngredient"] as? [String]) ?? []
+        // Some sites put the whole list in one string, a line each
+        let ingredients = ((dict["recipeIngredient"] as? [String]) ?? []).flatMap {
+            $0.replacingOccurrences(of: #"<br\s*/?>|</(?:p|li|div)>"#, with: "\n", options: [.regularExpression, .caseInsensitive])
+                .components(separatedBy: .newlines)
+        }
 
         var directions: [String] = []
         // The same dish made another way ("The Crockpot"), kept for the notes
@@ -925,7 +929,11 @@ struct RecipeParserCore {
                         }
                     }
                 }
-            } else if let instructionString = instructions as? String {
+            } else if var instructionString = instructions as? String {
+                // In HTML the paragraphs are the steps, and a newline inside one only wraps it
+                if instructionString.range(of: #"</?(?:p|li|div|br)\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+                    instructionString = instructionString.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                }
                 let withBreaks = instructionString
                     .replacingOccurrences(of: #"</(?:p|li|div|br\s*/?)>"#, with: "\n", options: .regularExpression)
                     .replacingOccurrences(of: #"<br\s*/?>"#, with: "\n", options: .regularExpression)
@@ -954,19 +962,34 @@ struct RecipeParserCore {
             }
         }
 
-        let description = stripHTML(dict["description"] as? String ?? "")
+        let steps = splitNumberedSteps(directions.map { stripHTML($0) })
+        let description = withoutSteps(stripHTML(dict["description"] as? String ?? ""), steps)
         let notes = ([description] + otherMethods).filter { !$0.isEmpty }.joined(separator: "\n\n")
 
         return ParsedRecipe(
-            title: stripHTML(title),
-            ingredients: ingredients.map { stripLeadingBullets(stripHTML($0)) },
-            directions: splitNumberedSteps(directions.map { stripHTML($0) }),
+            title: withoutSiteName(stripHTML(title)),
+            ingredients: ingredients.map { stripLeadingBullets(stripHTML($0)) }.filter { !$0.isEmpty },
+            directions: steps,
             sourceURL: sourceURL,
             imageURL: imageURL,
             prepDuration: prepTime,
             cookDuration: cookTime,
             notes: notes
         )
+    }
+
+    /// "Chicken in a Pot with Orzo | Recipes" is the page's title, not the recipe's.
+    static func withoutSiteName(_ title: String) -> String {
+        let name = title.components(separatedBy: " | ")[0].trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? title : name
+    }
+
+    /// Some sites repeat the whole method in the description; the notes keep only what comes before it.
+    static func withoutSteps(_ description: String, _ steps: [String]) -> String {
+        guard steps.count >= 2, let first = steps.first, let last = steps.last else { return description }
+        let collapsed = description.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        guard let start = collapsed.range(of: first), collapsed.contains(last) else { return description }
+        return String(collapsed[..<start.lowerBound]).trimmingCharacters(in: .whitespaces)
     }
 
     /// A section that makes the same dish another way: "The Crockpot",

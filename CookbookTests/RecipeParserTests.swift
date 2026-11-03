@@ -70,4 +70,35 @@ final class RecipeParserTests: XCTestCase {
         let recipe = RecipeParserCore.parseRecipe(html: html, sourceURL: "https://example.com/chili")
         XCTAssertEqual(recipe?.directions, ["Add everything to the slow cooker.", "Cook on low for 8 hours."])
     }
+
+    /// Barefoot Contessa's Chicken in a Pot, as its JSON-LD publishes it: every
+    /// ingredient in one string, the method as hard-wrapped HTML paragraphs, and
+    /// the method again in the description.
+    static let chickenInAPotHTML = #"""
+        <html><head><script type="application/ld+json">
+        {"@context":"https://schema.org","@graph":[{"@type":"Recipe",
+        "name":"Chicken in a Pot with Orzo | Recipes",
+        "description":"Chicken in a Pot with Orzo from Barefoot Contessa. <p>Preheat the oven to 350 degrees.</p>\n<p>Heat the olive oil\nin a Dutch oven and sear\nthe chicken.</p>\n<p>Stir in the orzo\nand serve hot.</p>",
+        "recipeIngredient":["Good olive oil\n1 (3½ to 4-pound) whole chicken\n4 cups chicken stock \n¾ cup orzo"],
+        "recipeInstructions":"<p>Preheat the oven to 350 degrees.</p>\n<p>Heat the olive oil\nin a Dutch oven and sear\nthe chicken.</p>\n<p>Stir in the orzo\nand serve hot.</p>"}]}
+        </script></head><body></body></html>
+        """#
+
+    func testWrappedHTMLAndOneIngredientString() {
+        let recipe = RecipeParserCore.parseRecipe(html: Self.chickenInAPotHTML, sourceURL: "https://barefootcontessa.com/recipes/chicken-in-a-pot")
+        XCTAssertEqual(recipe?.title, "Chicken in a Pot with Orzo")
+        XCTAssertEqual(recipe?.ingredients, ["Good olive oil", "1 (3½ to 4-pound) whole chicken", "4 cups chicken stock", "¾ cup orzo"])
+        XCTAssertEqual(recipe?.directions, [
+            "Preheat the oven to 350 degrees.",
+            "Heat the olive oil in a Dutch oven and sear the chicken.",
+            "Stir in the orzo and serve hot.",
+        ])
+        XCTAssertEqual(recipe?.notes, "Chicken in a Pot with Orzo from Barefoot Contessa.")
+    }
+
+    func testWithoutSteps_keepsADescriptionThatOnlyMentionsAStep() {
+        let steps = ["Toast the bread.", "Butter it."]
+        XCTAssertEqual(RecipeParserCore.withoutSteps("Just Toast the bread. So good.", steps), "Just Toast the bread. So good.")
+        XCTAssertEqual(RecipeParserCore.withoutSteps("Crisp. Toast the bread. Butter it.", steps), "Crisp.")
+    }
 }
