@@ -36,6 +36,9 @@ struct CookbookApp: App {
         WindowGroup {
             RecipeListView()
                 .environmentObject(recipeStore)
+                // How an iPhone Duo is held, for the screens that lay
+                // themselves out differently on one
+                .readsDuo()
                 .tracksReviewEligibility()
                 #if os(macOS)
                 .preferredColorScheme(appearanceMode.colorScheme)

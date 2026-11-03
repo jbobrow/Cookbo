@@ -32,13 +32,17 @@ struct RecipeListView: View {
     #if os(macOS)
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
     #endif
+    @Environment(\.duoPose) private var duoPose
+    @Environment(\.controlsRailed) private var controlsRailed
+    @Environment(\.controlsTrailing) private var controlsTrailing
 
-    // Check if device is iPad or Mac (grid view enabled)
+    // Check if device is iPad or Mac (grid view enabled), or an iPhone Duo
+    // opened to its inner screen, which is as roomy as a small iPad
     private var isGridCapable: Bool {
         #if os(macOS)
         return true
         #elseif os(iOS)
-        return UIDevice.current.userInterfaceIdiom == .pad
+        return UIDevice.current.userInterfaceIdiom == .pad || duoPose == .open
         #else
         return false
         #endif
@@ -415,6 +419,12 @@ struct RecipeListView: View {
         NavigationStack {
             if store.isICloudAvailable || store.useLocalStorage {
                 mainContent
+                    // Folded shut and tall, the buttons stand in the camera
+                    // band, under the thumb
+                    .cameraStripPage {
+                        RailButton(symbol: "books.vertical", label: "Cookbooks") { showingCookbookSwitcher = true }
+                        RailMenu(symbol: "plus", label: "Add Recipe") { addMenuItems }
+                    }
                     .navigationDestination(item: $cookLink) { target in
                         RecipeDetailView(recipe: target.recipe, cookAtStep: target.step)
                     }
@@ -552,9 +562,10 @@ struct RecipeListView: View {
             .help("Switch between grid and list view")
         }
         #else
-        ToolbarItem(placement: .topBarLeading) {
-            Button(action: { showingCookbookSwitcher = true }) {
-                Image(systemName: "books.vertical")
+        // Folded shut, it's in the camera band or at the trailing end instead
+        if !controlsRailed && !controlsTrailing {
+            ToolbarItem(placement: .topBarLeading) {
+                cookbooksButton
             }
         }
         #endif
@@ -610,18 +621,27 @@ struct RecipeListView: View {
             }
         }
 
-        if !isGridCapable {
+        if !isGridCapable && !controlsRailed && !controlsTrailing {
             ToolbarItem(placement: .automatic) {
                 Menu {
-                    Button(action: { showingAddRecipe = true }) {
-                        Label("New Recipe", systemImage: "plus")
-                    }
-                    Button(action: { showingURLImport = true }) {
-                        Label("Add from URL", systemImage: "square.and.arrow.down")
-                    }
+                    addMenuItems
                 } label: {
                     Image(systemName: "plus")
                 }
+            }
+        }
+
+        // Folded shut and wide: every button at the right-hand end, where
+        // the thumb holding the phone already is
+        if controlsTrailing {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Menu {
+                    addMenuItems
+                } label: {
+                    Image(systemName: "plus")
+                }
+                cookbooksButton
+                CameraStripCollapseButton()
             }
         }
         #else
@@ -638,6 +658,23 @@ struct RecipeListView: View {
             }
         }
         #endif
+    }
+
+    private var cookbooksButton: some View {
+        Button(action: { showingCookbookSwitcher = true }) {
+            Image(systemName: "books.vertical")
+        }
+        .accessibilityLabel("Cookbooks")
+    }
+
+    @ViewBuilder
+    private var addMenuItems: some View {
+        Button(action: { showingAddRecipe = true }) {
+            Label("New Recipe", systemImage: "plus")
+        }
+        Button(action: { showingURLImport = true }) {
+            Label("Add from URL", systemImage: "square.and.arrow.down")
+        }
     }
 
     /// Shows onboarding once, on the first launch of an empty cookbook, and

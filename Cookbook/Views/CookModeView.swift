@@ -8,6 +8,10 @@ import SwiftUI
 ///
 /// On iPhone it opens when you turn the phone sideways on a recipe page and
 /// closes when you turn it back; Start Cooking opens it anywhere.
+///
+/// On an iPhone Duo opened sideways, the ingredients are the left-hand page
+/// and the step the right; stood up like a laptop, the step is on the
+/// upright half and the buttons on the half lying on the counter.
 struct CookModeView: View {
     @EnvironmentObject private var store: RecipeStore
     @ObservedObject private var plans = CookPlanProvider.shared
@@ -21,6 +25,10 @@ struct CookModeView: View {
     #if os(iOS)
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
+    @Environment(\.cameraStrip) private var cameraStrip
+    @Environment(\.controlsRailed) private var controlsRailed
+    @Environment(\.controlsTrailing) private var controlsTrailing
+    @Environment(\.toggleCameraStrip) private var toggleCameraStrip
     @AppStorage("cookModeShowsShortSteps") private var prefersShortSteps = true
     @AppStorage("cookModeNextTaps") private var nextTaps = 0
     @AppStorage("cookModeStartedTimer") private var hasStartedTimer = false
@@ -60,7 +68,7 @@ struct CookModeView: View {
         let fresh = startStep == nil && steps > 0 && !recipe.wrappedValue.directions.contains(where: \.isCompleted)
         _introPage = State(initialValue: fresh ? .overview : nil)
         #if os(iOS)
-        _contentShown = State(initialValue: !(enteredByRotation && UIDevice.current.userInterfaceIdiom == .phone))
+        _contentShown = State(initialValue: !(enteredByRotation && OrientationLock.phoneTurnsToCook))
         #else
         _contentShown = State(initialValue: true)
         #endif
@@ -111,38 +119,45 @@ struct CookModeView: View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
             let scale = min(max((isLandscape ? geometry.size.height / 390 : geometry.size.width / 390), 1), 1.6)
+            let laptopFold = isLandscape ? nil : geometry.laptopFold
 
-            VStack(spacing: 12) {
-                topBar
-                progressBar
-                if let page = introPage {
-                    CookIntroView(
-                        page: page,
-                        overview: overview,
-                        prepTasks: prepTasks,
-                        prepped: $prepped,
-                        measureTasks: measureTasks,
-                        measured: $measured,
-                        accentColor: accentColor,
-                        isLandscape: isLandscape,
-                        drag: drag,
-                        pageKey: pageKey,
-                        onNext: { if !isSwiping { introNext() } },
-                        onBack: { if !isSwiping { withAnimation(.snappy) { introPage = .overview } } },
-                        onSkip: { withAnimation(.snappy) { introPage = nil } }
-                    )
-                    .id(page)
-                    .transition(.opacity)
-                } else if isCooked {
-                    cookedView
-                        .followsSwipe(drag, page: pageKey)
-                } else if isFinished {
-                    finishView(isLandscape: isLandscape)
-                        .followsSwipe(drag, page: pageKey)
-                } else if isLandscape {
-                    landscapeStep(scale: scale)
+            Group {
+                if let laptopFold, introPage == nil, !isCooked, !isFinished {
+                    laptopStep(fold: laptopFold, scale: scale)
                 } else {
-                    portraitStep(scale: scale)
+                    VStack(spacing: 12) {
+                        topBar
+                        progressBar
+                        if let page = introPage {
+                            CookIntroView(
+                                page: page,
+                                overview: overview,
+                                prepTasks: prepTasks,
+                                prepped: $prepped,
+                                measureTasks: measureTasks,
+                                measured: $measured,
+                                accentColor: accentColor,
+                                isLandscape: isLandscape,
+                                drag: drag,
+                                pageKey: pageKey,
+                                onNext: { if !isSwiping { introNext() } },
+                                onBack: { if !isSwiping { withAnimation(.snappy) { introPage = .overview } } },
+                                onSkip: { withAnimation(.snappy) { introPage = nil } }
+                            )
+                            .id(page)
+                            .transition(.opacity)
+                        } else if isCooked {
+                            cookedView
+                                .followsSwipe(drag, page: pageKey)
+                        } else if isFinished {
+                            finishView(isLandscape: isLandscape)
+                                .followsSwipe(drag, page: pageKey)
+                        } else if isLandscape {
+                            landscapeStep(scale: scale, spine: geometry.spine(minimumPage: 280))
+                        } else {
+                            portraitStep(scale: scale)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, isLandscape ? 8 : 20)
@@ -152,6 +167,12 @@ struct CookModeView: View {
             .contentShape(Rectangle())
             .simultaneousGesture(swipe)
             .opacity(contentShown ? 1 : 0)
+        }
+        // Folded shut and tall, the way out stands in the camera band
+        .cameraStripPage {
+            RailButton(symbol: "xmark", label: "Leave Cook Mode") { close() }
+                .keyboardShortcut(.cancelAction)
+                .tint(Color.primary)
         }
         .background(.background)
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { drag.width = $0 }
@@ -200,7 +221,7 @@ struct CookModeView: View {
             // Opened by turning the phone, turning it back closes it. The
             // phone says so before the screen turns, so the cook can fade out
             // first and the screen turns with nothing on it.
-            guard enteredByRotation, UIDevice.current.userInterfaceIdiom == .phone,
+            guard enteredByRotation, OrientationLock.phoneTurnsToCook,
                   UIDevice.current.orientation == .portrait, screenIsLandscape else { return }
             close()
         }
@@ -215,16 +236,9 @@ struct CookModeView: View {
 
     private var topBar: some View {
         HStack(spacing: 12) {
-            Button { close() } label: {
-                Image(systemName: "xmark")
-                    .font(.body.weight(.semibold))
-                    .frame(width: 44, height: 44)
-                    .background(.fill.tertiary, in: Circle())
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
-            .accessibilityLabel("Leave Cook Mode")
+            // Folded shut, it's in the camera band, or at the trailing end
+            // under the thumb
+            if !controlsRailed && !controlsTrailing { closeButton }
 
             Text(recipe.title)
                 .font(.subheadline.weight(.semibold))
@@ -254,7 +268,31 @@ struct CookModeView: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .fixedSize()
+
+            if controlsTrailing {
+                closeButton
+                roundButton(symbol: "arrow.down.right.and.arrow.up.left", action: toggleCameraStrip)
+                    .accessibilityLabel("Keep Beside the Camera")
+            }
         }
+        .clearOfCameraStrip(cameraStrip)
+    }
+
+    private var closeButton: some View {
+        roundButton(symbol: "xmark") { close() }
+            .keyboardShortcut(.cancelAction)
+            .accessibilityLabel("Leave Cook Mode")
+    }
+
+    private func roundButton(symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.body.weight(.semibold))
+                .frame(width: 44, height: 44)
+                .background(.fill.tertiary, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var progressBar: some View {
@@ -280,12 +318,17 @@ struct CookModeView: View {
         }
         .accessibilityElement()
         .accessibilityLabel("\(min(stepIndex, directions.count)) of \(directions.count) steps done")
+        .clearOfCameraStrip(cameraStrip)
     }
 
     // MARK: - Steps
 
-    private func landscapeStep(scale: CGFloat) -> some View {
-        VStack(spacing: 12) {
+    /// Opened like a book (`spine`), the ingredients are the left-hand page
+    /// and the step the right, with the crease for the rule between them.
+    private func landscapeStep(scale: CGFloat, spine: CGRect?) -> some View {
+        // The column starts 8pt in, and its trailing 24pt reach the crease
+        let columnWidth = spine.map { max($0.minX - 8 - 24, 0) } ?? 228 * min(scale, 1.3)
+        return VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 0) {
                 // A long list scrolls rather than running off the bottom; each
                 // step starts at the top of its own
@@ -297,17 +340,19 @@ struct CookModeView: View {
                 .id(stepIndex)
                 .transition(.opacity)
                 .fadesWithSwipe(drag, page: pageKey)
-                .frame(width: 228 * min(scale, 1.3), alignment: .leading)
+                .frame(width: columnWidth, alignment: .leading)
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(.trailing, 24)
                 .overlay(alignment: .trailing) {
-                    Rectangle().fill(.separator).frame(width: 1)
+                    if spine == nil {
+                        Rectangle().fill(.separator).frame(width: 1)
+                    }
                 }
 
                 // Sliding step text is masked at the rule, not drawn over the
                 // ingredients (taller than the column so highlights aren't cut)
                 slidingStepText(size: fontSize(landscape: true) * scale, scrolls: true)
-                    .padding(.leading, 28)
+                    .padding(.leading, spine.map { $0.width + 24 } ?? 28)
             }
             .frame(maxHeight: .infinity)
 
@@ -342,6 +387,61 @@ struct CookModeView: View {
             }
         }
         .padding(.top, 6)
+    }
+
+    /// Stood up like a laptop on the counter: the step on the upright half,
+    /// at reading distance, and what goes in with the buttons on the half
+    /// lying flat, under the hand. Nothing sits on the hinge.
+    private func laptopStep(fold: CGRect, scale: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                topBar
+                progressBar
+                shortTextToggle
+                slidingStepText(size: fontSize(landscape: false) * scale, scrolls: true)
+            }
+            // The page starts 4pt down; the upper half ends at the fold
+            .frame(height: max(fold.minY - 4 - 12, 0), alignment: .top)
+            .padding(.bottom, 12)
+
+            Color.clear
+                .frame(height: fold.height)
+
+            VStack(spacing: 16) {
+                if !currentStep.items.isEmpty {
+                    // As tall as the list, or scrolling once that's more
+                    // than the half has room for
+                    ViewThatFits(in: .vertical) {
+                        laptopIngredientCard(ingredientList)
+                        laptopIngredientCard(
+                            ScrollView(.vertical) {
+                                ingredientList
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .scrollBounceBehavior(.basedOnSize)
+                        )
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 12) {
+                    backButton(compact: true)
+                    nextButton(fullWidth: true)
+                }
+            }
+            .padding(.top, 16)
+            .frame(maxHeight: .infinity)
+        }
+    }
+
+    private func laptopIngredientCard(_ content: some View) -> some View {
+        content
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .fadesWithSwipe(drag, page: pageKey)
     }
 
     private func fontSize(landscape: Bool) -> CGFloat {
@@ -856,7 +956,7 @@ struct CookModeView: View {
     /// upright; otherwise it slides away as usual.
     private func close() {
         #if os(iOS)
-        if UIDevice.current.userInterfaceIdiom == .phone, screenIsLandscape {
+        if OrientationLock.phoneTurnsToCook, screenIsLandscape {
             guard !closingUpright else { return }
             closingUpright = true
             withAnimation(.easeIn(duration: 0.15)) { contentShown = false }

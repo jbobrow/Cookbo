@@ -2,15 +2,34 @@
 import UIKit
 
 /// On iPhone the app stays upright, except cook mode, which can turn
-/// sideways. iPad keeps every orientation.
+/// sideways. iPad keeps every orientation, and so does an iPhone Duo opened
+/// up: its inner screen is held like a book or a tablet, either way round.
 enum OrientationLock {
     /// A count, not a flag: one cook mode can appear before another has
     /// finished disappearing (say, when a timer's link opens it again).
     private static var openCookModes = 0
+    /// An iPhone Duo, opened to its inner screen.
+    private static var duoIsOpen = false
 
     static var supported: UIInterfaceOrientationMask {
         guard UIDevice.current.userInterfaceIdiom == .phone else { return .all }
-        return openCookModes > 0 ? .allButUpsideDown : .portrait
+        return openCookModes > 0 || duoIsOpen ? .allButUpsideDown : .portrait
+    }
+
+    /// The screen stays upright and turning the phone sideways means cook
+    /// mode: every iPhone, and an iPhone Duo folded shut. Opened up, turning
+    /// it only turns the page.
+    static var phoneTurnsToCook: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone && !duoIsOpen
+    }
+
+    /// Opened, the inner screen turns freely; folded shut, the outer screen
+    /// goes back upright.
+    static func duoPoseChanged(_ pose: DuoPose) {
+        let open = pose == .open
+        guard open != duoIsOpen else { return }
+        duoIsOpen = open
+        refreshSupportedOrientations()
     }
 
     /// Lets cook mode turn sideways. UIKit then turns it to match the phone:
