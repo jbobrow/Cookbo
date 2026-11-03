@@ -22,6 +22,9 @@ struct RecipeParser {
     }
 
     static func fetchAndParse(urlString: String) async throws -> ParsedRecipe {
+        // Instagram serves the caption only on canonical post/reel URLs.
+        let urlString = RecipeParserCore.isInstagramURL(urlString)
+            ? RecipeParserCore.cleanInstagramURL(urlString) : urlString
         guard let url = URL(string: urlString),
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {

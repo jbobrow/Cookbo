@@ -162,3 +162,39 @@ test('knows a section that makes it another way', () => {
   for (const name of ['The Crockpot', 'Instant Pot', 'Slow Cooker Directions', 'Stovetop Method']) assert.ok(isOtherMethod(name), name);
   for (const name of ['For the sauce', 'Oven']) assert.ok(!isOtherMethod(name), name);
 });
+
+// Shaped like barefootcontessa.com/recipes/chicken-in-a-pot
+test('reads a recipe published as wrapped HTML and one long ingredient string', () => {
+  const method = '<p>Preheat the oven to 350 degrees.</p>\n<p>Heat the olive oil\nin a Dutch oven and sear\nthe chicken.</p>\n<p>Stir in the orzo\nand serve hot.</p>';
+  const recipe = parseRecipe(page({
+    '@type': 'Recipe',
+    name: 'Chicken in a Pot with Orzo | Recipes',
+    description: `Chicken in a Pot with Orzo from Barefoot Contessa. ${method}`,
+    recipeIngredient: ['Good olive oil\n1 (3½ to 4-pound) whole chicken\n4 cups chicken stock \n¾ cup orzo'],
+    recipeInstructions: method,
+  }), 'https://barefootcontessa.com/recipes/chicken-in-a-pot');
+
+  assert.equal(recipe.title, 'Chicken in a Pot with Orzo');
+  assert.deepEqual(recipe.ingredients, ['Good olive oil', '1 (3½ to 4-pound) whole chicken', '4 cups chicken stock', '¾ cup orzo']);
+  assert.deepEqual(recipe.steps, [
+    'Preheat the oven to 350 degrees.',
+    'Heat the olive oil in a Dutch oven and sear the chicken.',
+    'Stir in the orzo and serve hot.',
+  ]);
+  assert.equal(recipe.notes, 'Chicken in a Pot with Orzo from Barefoot Contessa.');
+});
+
+test('plain text steps still split a line each', () => {
+  const recipe = parseRecipe(page({ '@type': 'Recipe', name: 'Toast', recipeInstructions: 'Toast the bread.\nButter it.' }), 'https://example.com/t');
+  assert.deepEqual(recipe.steps, ['Toast the bread.', 'Butter it.']);
+});
+
+test('keeps a description that only mentions a step', () => {
+  const recipe = parseRecipe(page({
+    '@type': 'Recipe',
+    name: 'Toast',
+    description: 'Just Toast the bread. So good.',
+    recipeInstructions: ['Toast the bread.', 'Butter it.'],
+  }), 'https://example.com/t');
+  assert.equal(recipe.notes, 'Just Toast the bread. So good.');
+});

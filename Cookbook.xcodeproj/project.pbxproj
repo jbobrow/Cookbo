@@ -25,6 +25,7 @@
 		C0FFEEB400000000000003 /* WeekPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB411111111110003 /* WeekPlan.swift */; };
 		C0FFEEB500000000000004 /* Recipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEEB511111111110004 /* Recipe.swift */; };
 		CC000000000000000000000E /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000001 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		EE000000000000000000000E /* SafariExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000001 /* SafariExtension.appex */; platformFilters = (ios, macos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D65719950EF6A48DF0F78F43 /* CookbookFoldersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */; };
 		DD000000000000000000000E /* CookTimerWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000001 /* CookTimerWidget.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DD0000000000000000000011 /* CookTimerAlarm.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000010 /* CookTimerAlarm.swift */; };
@@ -49,6 +50,13 @@
 			remoteGlobalIDString = CC0000000000000000000003;
 			remoteInfo = ShareExtension;
 		};
+		EE000000000000000000000A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2B243B922F0B11D400840694 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = EE0000000000000000000003;
+			remoteInfo = SafariExtension;
+		};
 		DD000000000000000000000A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2B243B922F0B11D400840694 /* Project object */;
@@ -66,6 +74,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				CC000000000000000000000E /* ShareExtension.appex in Embed Foundation Extensions */,
+				EE000000000000000000000E /* SafariExtension.appex in Embed Foundation Extensions */,
 				DD000000000000000000000E /* CookTimerWidget.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
@@ -94,6 +103,7 @@
 		C0FFEEB411111111110003 /* WeekPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeekPlan.swift; path = Cookbook/Services/WeekPlan.swift; sourceTree = SOURCE_ROOT; };
 		C0FFEEB511111111110004 /* Recipe.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Recipe.swift; path = Cookbook/Models/Recipe.swift; sourceTree = SOURCE_ROOT; };
 		CC0000000000000000000001 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		EE0000000000000000000001 /* SafariExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SafariExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DD0000000000000000000001 /* CookTimerWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CookTimerWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DD0000000000000000000010 /* CookTimerAlarm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookTimerAlarm.swift; sourceTree = "<group>"; };
 		E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CookbookFoldersTests.swift; sourceTree = "<group>"; };
@@ -114,6 +124,13 @@
 				Info.plist,
 			);
 			target = CC0000000000000000000003 /* ShareExtension */;
+		};
+		EE000000000000000000000D /* Exceptions for "SafariExtension" folder in "SafariExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = EE0000000000000000000003 /* SafariExtension */;
 		};
 		DD000000000000000000000D /* Exceptions for "CookTimerWidget" folder in "CookTimerWidget" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
@@ -139,6 +156,19 @@
 				CC000000000000000000000D /* Exceptions for "ShareExtension" folder in "ShareExtension" target */,
 			);
 			path = ShareExtension;
+			sourceTree = "<group>";
+		};
+		EE0000000000000000000012 /* BrowserExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BrowserExtension;
+			sourceTree = "<group>";
+		};
+		EE0000000000000000000002 /* SafariExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				EE000000000000000000000D /* Exceptions for "SafariExtension" folder in "SafariExtension" target */,
+			);
+			path = SafariExtension;
 			sourceTree = "<group>";
 		};
 		DD0000000000000000000002 /* CookTimerWidget */ = {
@@ -168,6 +198,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		CC0000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EE0000000000000000000005 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -204,6 +241,8 @@
 			children = (
 				2B243B9C2F0B11D400840694 /* Cookbook */,
 				CC0000000000000000000002 /* ShareExtension */,
+				EE0000000000000000000002 /* SafariExtension */,
+				EE0000000000000000000012 /* BrowserExtension */,
 				2B243B9B2F0B11D400840694 /* Products */,
 				DD0000000000000000000002 /* CookTimerWidget */,
 				2B720F512F4D7DC60069FE07 /* Shared */,
@@ -219,6 +258,7 @@
 				2B243B9A2F0B11D400840694 /* Cookbo.app */,
 				CC0000000000000000000001 /* ShareExtension.appex */,
 				DD0000000000000000000001 /* CookTimerWidget.appex */,
+				EE0000000000000000000001 /* SafariExtension.appex */,
 				99965210B2E197AAC6702F05 /* CookbookTests.xctest */,
 			);
 			name = Products;
@@ -281,6 +321,7 @@
 			);
 			dependencies = (
 				CC000000000000000000000B /* PBXTargetDependency */,
+				EE000000000000000000000B /* PBXTargetDependency */,
 				DD000000000000000000000B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
@@ -329,6 +370,27 @@
 			productReference = CC0000000000000000000001 /* ShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		EE0000000000000000000003 /* SafariExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EE0000000000000000000009 /* Build configuration list for PBXNativeTarget "SafariExtension" */;
+			buildPhases = (
+				EE0000000000000000000004 /* Sources */,
+				EE0000000000000000000005 /* Frameworks */,
+				EE0000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				EE0000000000000000000002 /* SafariExtension */,
+				EE0000000000000000000012 /* BrowserExtension */,
+			);
+			name = SafariExtension;
+			productName = SafariExtension;
+			productReference = EE0000000000000000000001 /* SafariExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		DD0000000000000000000003 /* CookTimerWidget */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = DD0000000000000000000009 /* Build configuration list for PBXNativeTarget "CookTimerWidget" */;
@@ -365,6 +427,9 @@
 					CC0000000000000000000003 = {
 						CreatedOnToolsVersion = 26.2;
 					};
+					EE0000000000000000000003 = {
+						CreatedOnToolsVersion = 27.0;
+					};
 					DD0000000000000000000003 = {
 						CreatedOnToolsVersion = 27.0;
 					};
@@ -387,6 +452,7 @@
 				2B243B992F0B11D400840694 /* Cookbook */,
 				CC0000000000000000000003 /* ShareExtension */,
 				BA7F2D1B4F4CAADF7BC947F9 /* CookbookTests */,
+				EE0000000000000000000003 /* SafariExtension */,
 				DD0000000000000000000003 /* CookTimerWidget */,
 			);
 		};
@@ -408,6 +474,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		CC0000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EE0000000000000000000006 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -438,6 +511,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				2B720F532F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EE0000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -487,6 +567,15 @@
 			isa = PBXTargetDependency;
 			target = CC0000000000000000000003 /* ShareExtension */;
 			targetProxy = CC000000000000000000000A /* PBXContainerItemProxy */;
+		};
+		EE000000000000000000000B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilters = (
+				ios,
+				macos,
+			);
+			target = EE0000000000000000000003 /* SafariExtension */;
+			targetProxy = EE000000000000000000000A /* PBXContainerItemProxy */;
 		};
 		DD000000000000000000000B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -829,6 +918,66 @@
 			};
 			name = Release;
 		};
+		EE0000000000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SafariExtension/SafariExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 29;
+				DEVELOPMENT_TEAM = 63KWA2RPU8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SafariExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Save to Cookbo";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				MARKETING_VERSION = 1.5.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook.SafariExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		EE0000000000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SafariExtension/SafariExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 29;
+				DEVELOPMENT_TEAM = 63KWA2RPU8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SafariExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Save to Cookbo";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				MARKETING_VERSION = 1.5.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonbobrow.Cookbook.SafariExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		DD0000000000000000000007 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -936,6 +1085,15 @@
 			buildConfigurations = (
 				CC0000000000000000000007 /* Debug */,
 				CC0000000000000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EE0000000000000000000009 /* Build configuration list for PBXNativeTarget "SafariExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE0000000000000000000007 /* Debug */,
+				EE0000000000000000000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

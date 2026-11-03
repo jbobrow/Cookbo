@@ -1,0 +1,80 @@
+/* Cookbo's palette and type, from docs/assets/site.css */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --bg: #F4F3F1;
+  --card: #FFFFFF;
+  --ink: #16171B;
+  --muted: #8D8E94;
+  --line: rgba(22, 23, 27, 0.08);
+  --amber: #FFAA00;
+  --on-amber: #16171B;
+  --danger: #D9352B;
+  --font: ui-rounded, "SF Pro Rounded", Nunito, system-ui, -apple-system, sans-serif;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1C1C1E;
+    --card: #2C2C2E;
+    --ink: #F4F3F1;
+    --muted: #98989F;
+    --line: rgba(244, 243, 241, 0.1);
+    --danger: #FF6B5E;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+[hidden] { display: none !important; }
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.header img {
+  width: 22px;
+  height: 22px;
+}
+
+.muted { color: var(--muted); }
+
+.button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 11px 16px;
+  background: var(--amber);
+  color: var(--on-amber);
+  font: inherit;
+  font-weight: 700;
+  font-size: 16px;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button:disabled { opacity: 0.55; cursor: default; }
+
+.button.secondary {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.error { color: var(--danger); }

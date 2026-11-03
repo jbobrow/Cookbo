@@ -237,6 +237,32 @@ Add these keys if needed:
 2. Select "Share"
 3. Share the `.cookbook` file
 
+### Save to Cookbo (browser extension)
+
+A toolbar button for Chrome and Safari that saves the recipe on the current page
+into a cookbook. It reads the page's schema.org JSON-LD in the browser, so it
+works on pages a server can't fetch (signed-in, bot-blocked), and writes the same
+`Recipes/<title>-<hash>.md` and `Images/<UUID>.jpg` files the app does, straight
+into `iCloud Drive/Cookbo/Cookbooks/<cookbook>/`.
+
+The extension lives in `BrowserExtension/`. Its `parse.js` and `recipe-file.js`
+are copies of `worker/src/parse.js` and `docs/assets/recipe-file.js`; after
+changing either original, run `Scripts/sync_browser_extension.sh`
+(`npm test` in `worker/` fails until the copies match). Its icons are the app
+icon in a squircle, drawn by `swift Scripts/browser_extension_icons.swift`.
+
+**Chrome:** open `chrome://extensions`, turn on Developer mode, click
+**Load unpacked** and choose `BrowserExtension/`. The first time, it asks for
+the Cookbo folder: pick **iCloud Drive › Cookbo**. Chrome may ask for permission
+to that folder again after it restarts.
+
+**Safari (Mac, iPhone, iPad):** the `SafariExtension` target is embedded in the
+app and carries `BrowserExtension/` as its resources. Safari can't write files
+itself, so `SafariWebExtensionHandler.swift` writes them into Cookbo's iCloud
+container. Run the app once, then turn on **Save to Cookbo** in Safari's
+Settings › Extensions (on a development build, first turn on
+Develop › Developer Settings › Allow unsigned extensions).
+
 ## Data Storage Details
 
 ### File Structure

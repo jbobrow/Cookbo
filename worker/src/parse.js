@@ -62,14 +62,16 @@ function extractRecipe(dict, sourceURL) {
 
   const ingredients = asArray(dict.recipeIngredient)
     .filter((i) => typeof i === 'string')
+    // Some sites put the whole list in one string, a line each
+    .flatMap((i) => i.replace(/<br\s*\/?>|<\/(?:p|li|div)>/gi, '\n').split('\n'))
     .map((i) => stripLeadingBullets(stripHTML(i)))
     .filter(Boolean);
 
   const { steps, otherMethods } = extractSteps(dict.recipeInstructions);
-  const description = stripHTML(typeof dict.description === 'string' ? dict.description : '');
+  const description = withoutSteps(stripHTML(typeof dict.description === 'string' ? dict.description : ''), steps);
 
   return {
-    title: stripHTML(typeof dict.name === 'string' ? dict.name : ''),
+    title: withoutSiteName(stripHTML(typeof dict.name === 'string' ? dict.name : '')),
     image: extractImage(dict.image, sourceURL),
     ingredients,
     steps,
@@ -89,7 +91,9 @@ function extractSteps(instructions) {
   if (!instructions) return { steps: [], otherMethods: [] };
 
   if (typeof instructions === 'string') {
-    const withBreaks = instructions
+    // In HTML the paragraphs are the steps, and a newline inside one only wraps it
+    const text = /<\/?(?:p|li|div|br)\b/i.test(instructions) ? instructions.replace(/\s+/g, ' ') : instructions;
+    const withBreaks = text
       .replace(/<\/(?:p|li|div)>/gi, '\n')
       .replace(/<br\s*\/?>/gi, '\n');
     const steps = stripHTML(withBreaks, { keepNewlines: true })
@@ -131,6 +135,19 @@ function extractSteps(instructions) {
     }
   }
   return { steps: splitNumberedSteps(steps.map((s) => stripHTML(s)).filter(Boolean)), otherMethods };
+}
+
+/** "Chicken in a Pot with Orzo | Recipes" is the page's title, not the recipe's. */
+export function withoutSiteName(title) {
+  return title.split(' | ')[0].trim() || title;
+}
+
+/** Some sites repeat the whole method in the description; the notes keep only what comes before it. */
+export function withoutSteps(description, steps) {
+  if (steps.length < 2) return description;
+  const start = description.indexOf(steps[0]);
+  if (start === -1 || !description.includes(steps.at(-1))) return description;
+  return description.slice(0, start).trim();
 }
 
 /** A section that makes the same dish another way: "The Crockpot", "Instant Pot", "Stovetop Method". */
