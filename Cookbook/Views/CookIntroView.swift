@@ -16,6 +16,12 @@ struct CookIntroView: View {
     @Binding var measured: Set<Int>
     let accentColor: Color
     let isLandscape: Bool
+    /// An iPhone Duo opened up: where the page splits, in the space of the
+    /// margins around this page, which is laid out either side of it. Held
+    /// like a book it's the crease; opened flat, the middle of the glass.
+    let spine: CGRect?
+    let sideMargin: CGFloat
+    @Environment(\.cameraStrip) private var cameraStrip
     /// A swipe between pages, which this page follows. Passing over the
     /// checkboxes isn't tapping them.
     let drag: PageDrag
@@ -28,39 +34,164 @@ struct CookIntroView: View {
     /// asked for.
     @State private var measuresShown = false
     private var showingMeasures: Bool { prepTasks.isEmpty || measuresShown }
+    /// An iPhone Duo stood up like a laptop: the hinge, in this view's space.
+    @State private var laptopFold: CGRect?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // The page moves with a swipe; the buttons stay put
-            VStack(alignment: .leading, spacing: 10) {
-                Text(page == .overview ? overview.totalLabel : (prepTasks.isEmpty ? "Measure these first" : "Cut these first"))
-                    .font(.system(size: isLandscape ? 26 : 30, weight: .bold))
-                    .padding(.top, 8)
-                    .accessibilityAddTraits(.isHeader)
-
-                Group {
-                    switch page {
-                    case .overview:
-                        CookOverviewTimeline(overview: overview, accentColor: accentColor, isLandscape: isLandscape)
-                    case .prep: prepList
+        Group {
+            if page == .prep, let laptopFold {
+                laptopPrep(fold: laptopFold)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    // The page moves with a swipe; the buttons stay put
+                    VStack(alignment: .leading, spacing: 10) {
+                        if !splitsPrep { heading }
+                        pageContent
                     }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-            .followsSwipe(drag, page: pageKey)
+                    .followsSwipe(drag, page: pageKey)
 
-            buttons
+                    buttons
+                        .clearOfCameraStrip(cameraStrip)
+                }
+            }
         }
+        .onGeometryChange(for: CGRect?.self, of: { $0.laptopFold }) { laptopFold = $0 }
+    }
+
+    private var pageContent: some View {
+        Group {
+            switch page {
+            case .overview:
+                CookOverviewTimeline(overview: overview, accentColor: accentColor, isLandscape: isLandscape)
+            case .prep:
+                if splitsPrep { prepSplit } else { prepList }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var heading: some View {
+        headingText(page == .overview ? overview.totalLabel : (prepTasks.isEmpty ? "Measure these first" : "Cut these first"))
+    }
+
+    private func headingText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: isLandscape ? 26 : 30, weight: .bold))
+            .padding(.top, 8)
+            .accessibilityAddTraits(.isHeader)
     }
 
     // MARK: - Prep
+
+    /// Three across, or opened like a book, one to a page with the crease
+    /// between them. `inset` is how far the grid already sits in from the margin.
+    private func cardColumns(spacing: CGFloat, inset: CGFloat) -> [GridItem] {
+        guard let spine else {
+            return Array(repeating: GridItem(.flexible(), spacing: spacing, alignment: .top), count: 3)
+        }
+        return [
+            GridItem(.fixed(max(spine.minX - sideMargin - 24 - inset, 0)), spacing: spine.width + 48, alignment: .top),
+            GridItem(.flexible(), alignment: .top)
+        ]
+    }
+
+    /// Stood up like a laptop: the cutting on the upright half, and the
+    /// measuring and the buttons on the half under the hand. With nothing to
+    /// cut, the measuring goes up top. Each half scrolls on its own, so
+    /// nothing sits on the hinge.
+    private func laptopPrep(fold: CGRect) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 10) {
+                heading
+
+                ScrollView(.vertical, showsIndicators: false) {
+                    Group {
+                        if prepTasks.isEmpty {
+                            measureSection
+                        } else {
+                            // Two across, since the half holds only two rows
+                            // of cards without scrolling
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: 2), spacing: 12) {
+                                ForEach(prepTasks.indices, id: \.self) { index in
+                                    prepRow(index)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+            .followsSwipe(drag, page: pageKey)
+            .frame(height: max(fold.minY - 12, 0), alignment: .top)
+            .padding(.bottom, 12)
+
+            Color.clear
+                .frame(height: fold.height)
+
+            VStack(spacing: 16) {
+                if prepTasks.isEmpty {
+                    Spacer(minLength: 0)
+                } else {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        measureSection
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .followsSwipe(drag, page: pageKey)
+                }
+
+                buttons
+            }
+            .padding(.top, 16)
+            .frame(maxHeight: .infinity)
+        }
+    }
+
+    /// Opened up, with both to do, there's a side for each.
+    private var splitsPrep: Bool {
+        page == .prep && spine != nil && !prepTasks.isEmpty && !measureTasks.isEmpty
+    }
+
+    /// The measuring on the left, where the steps keep what goes in, and the
+    /// cutting on the right, either side of the spine. Both are in full view,
+    /// each scrolling on its own.
+    @ViewBuilder
+    private var prepSplit: some View {
+        if let spine {
+            HStack(alignment: .top, spacing: spine.width + 48) {
+                prepColumn("Measure these") { measureList }
+                    .frame(width: max(spine.minX - sideMargin - 24, 0))
+
+                prepColumn("Cut these") {
+                    VStack(spacing: 12) {
+                        ForEach(prepTasks.indices, id: \.self) { index in
+                            prepRow(index)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func prepColumn<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            headingText(title)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                content()
+                    .padding(.vertical, 4)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     private var prepList: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
                     if isLandscape {
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: 3), spacing: 14) {
+                        LazyVGrid(columns: cardColumns(spacing: 14, inset: 0), spacing: 14) {
                             ForEach(prepTasks.indices, id: \.self) { index in
                                 prepCard(index)
                             }
@@ -128,7 +259,7 @@ struct CookIntroView: View {
     }
 
     private var measureList: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 20, alignment: .top), count: isLandscape ? 3 : 1),
+        LazyVGrid(columns: isLandscape && !splitsPrep ? cardColumns(spacing: 20, inset: 16) : [GridItem(.flexible(), spacing: 20, alignment: .top)],
                   alignment: .leading, spacing: 12) {
             ForEach(measureTasks.indices, id: \.self) { index in
                 measureRow(index)
@@ -237,11 +368,11 @@ struct CookIntroView: View {
                 Text(nextLabel)
                 Image(systemName: "chevron.right")
             }
-            .font(.title3.weight(.bold))
+            .font(spine != nil ? .body.weight(.bold) : .title3.weight(.bold))
             .foregroundColor(.white)
-            .frame(maxWidth: isLandscape ? nil : .infinity, minHeight: 56)
-            .frame(minWidth: isLandscape ? 220 : nil)
-            .padding(.horizontal, 24)
+            .frame(maxWidth: isLandscape ? nil : .infinity, minHeight: spine != nil ? 44 : 56)
+            .frame(minWidth: isLandscape && spine == nil ? 220 : nil)
+            .padding(.horizontal, spine != nil ? 18 : 24)
             .background(accentColor, in: Capsule())
             .contentShape(Capsule())
         }
@@ -253,7 +384,14 @@ struct CookIntroView: View {
     private var backButton: some View {
         let first = page == .overview
         Button(action: onBack) {
-            if isLandscape {
+            if spine != nil {
+                // The same as on the steps that follow
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 44, height: 44)
+                    .background(.fill.tertiary, in: Circle())
+                    .contentShape(Circle())
+            } else if isLandscape {
                 Label("Back", systemImage: "chevron.left")
                     .font(.body.weight(.semibold))
                     .padding(.horizontal, 18)
@@ -288,7 +426,15 @@ struct CookIntroView: View {
 
     @ViewBuilder
     private var buttons: some View {
-        if isLandscape {
+        if spine != nil {
+            // Opened up, in the corner where Next stays through the steps
+            HStack(spacing: 12) {
+                Spacer(minLength: 0)
+                skipButton
+                backButton
+                nextButton
+            }
+        } else if isLandscape {
             HStack(spacing: 16) {
                 backButton
                 Spacer(minLength: 0)
@@ -320,10 +466,13 @@ struct CookOverviewTimeline: View {
     var body: some View {
         GeometryReader { geometry in
             let frames = blockFrames(in: geometry.size)
+            // An iPhone Duo's crease, held like a book or stood up like a
+            // laptop. Opened flat, a bar's label has nothing to keep clear of.
+            let crease = geometry.fold == nil ? nil : isLandscape ? geometry.spine(minimumPage: 280) : geometry.fold?.frame
             ZStack(alignment: .topLeading) {
                 ForEach(overview.blocks.indices, id: \.self) { index in
                     if let frame = frames[index] {
-                        block(overview.blocks[index], in: frame)
+                        block(overview.blocks[index], in: frame, crease: crease)
                     }
                 }
             }
@@ -336,7 +485,9 @@ struct CookOverviewTimeline: View {
         .accessibilityLabel("Overview")
     }
 
-    private func block(_ block: CookOverview.Block, in frame: CGRect) -> some View {
+    /// A bar can cross the crease, but its word and time keep to the bigger
+    /// of the two pieces it's cut into.
+    private func block(_ block: CookOverview.Block, in frame: CGRect, crease: CGRect?) -> some View {
         let fill: Color = switch block.kind {
         case .prep: .orange
         case .cook: accentColor
@@ -344,6 +495,20 @@ struct CookOverviewTimeline: View {
         }
         let ink: Color = block.kind == .alongside ? Color(red: 0, green: 0.13, blue: 0.18) : .white
         let alignment: HorizontalAlignment = (isLandscape || block.lane > 0) ? .center : .leading
+        let pieces: (before: CGFloat, after: CGFloat)? = crease.flatMap { crease in
+            let (start, end) = isLandscape ? (frame.minX, frame.maxX) : (frame.minY, frame.maxY)
+            let (creaseStart, creaseEnd) = isLandscape ? (crease.minX, crease.maxX) : (crease.minY, crease.maxY)
+            guard start < creaseEnd, end > creaseStart else { return nil }
+            return (max(creaseStart - start, 0), max(end - creaseEnd, 0))
+        }
+        let labelAlignment: Alignment = {
+            guard let pieces else { return Alignment(horizontal: alignment, vertical: .center) }
+            let first = pieces.before >= pieces.after
+            return isLandscape
+                ? Alignment(horizontal: first ? .leading : .trailing, vertical: .center)
+                : Alignment(horizontal: alignment, vertical: first ? .top : .bottom)
+        }()
+        let piece = pieces.map { max($0.before, $0.after) }
         return VStack(alignment: alignment, spacing: 1) {
             Text(block.word)
                 .font(.system(size: 16, weight: .bold))
@@ -358,7 +523,8 @@ struct CookOverviewTimeline: View {
         .minimumScaleFactor(0.7)
         .foregroundColor(ink)
         .padding(.horizontal, alignment == .leading ? 16 : 6)
-        .frame(width: frame.width, height: frame.height, alignment: Alignment(horizontal: alignment, vertical: .center))
+        .frame(width: isLandscape ? piece : nil, height: isLandscape ? nil : piece)
+        .frame(width: frame.width, height: frame.height, alignment: labelAlignment)
         .background(fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .offset(x: frame.minX, y: frame.minY)
         .accessibilityElement(children: .combine)

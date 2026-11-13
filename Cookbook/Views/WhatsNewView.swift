@@ -15,12 +15,20 @@ struct WhatsNew {
     let version: String
     let items: [Item]
 
-    /// Every version with something to show. A version without an entry
-    /// shows nothing.
+    /// Every version with something to show, newest first. A version without
+    /// an entry shows nothing.
     static let releases: [WhatsNew] = [
-        WhatsNew(version: "1.5.2", items: [
+        WhatsNew(version: "1.6", items: [
+            Item(icon: "iphone", title: "Made for iPhone Duo",
+                 detail: "Cookbo fits your iPhone Duo however you hold it: shut, open flat, like a book or stood up like a laptop."),
+            Item(icon: "book", title: "Open like a book",
+                 detail: "Your cookbook fills both pages, a recipe becomes a two-page spread, and cook mode gives the ingredients and the step a page each."),
             Item(icon: "doc.text", title: "Recipes from PDFs",
                  detail: "Add a recipe card, a handout or a saved page from a PDF, from the + menu or the share sheet."),
+            Item(icon: "flame", title: "Cook mode, opened up",
+                 detail: "Directions take two thirds of the screen, prep puts what to measure and cut side by side, and Next stays in the corner."),
+            Item(icon: "textformat.size", title: "Easier to read while you cook",
+                 detail: "Long steps stay large and scroll instead of shrinking, and long ingredient lists no longer crowd them out."),
         ]),
         WhatsNew(version: "1.5.1", items: [
             Item(icon: "sparkles", title: "A tour of Cookbo",
@@ -42,6 +50,13 @@ struct WhatsNew {
     static var current: WhatsNew? {
         releases.first { $0.version == currentVersion }
     }
+
+    /// The newest entry this version has reached, for the About page, which
+    /// has something to show even when this version has no entry of its own.
+    static var latest: WhatsNew? {
+        guard let currentVersion else { return releases.first }
+        return releases.first { $0.version.compare(currentVersion, options: .numeric) != .orderedDescending }
+    }
 }
 
 /// The version's highlights and a way into the tour. Taking the tour swaps
@@ -51,6 +66,7 @@ struct WhatsNewView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.duoPose) private var duoPose
     @State private var takingTour = false
 
     var body: some View {
@@ -74,7 +90,7 @@ struct WhatsNewView: View {
                 VStack(spacing: 0) {
                     ProduceTitle(title: "What's New", fontSize: sizeClass == .compact ? 36 : 44,
                                  perSide: sizeClass == .compact ? 2 : 3)
-                        .padding(.top, 56)
+                        .padding(.top, duoPose == .open ? .duoCorner : 56)
                     Text("in Cookbo \(whatsNew.version)")
                         .font(.title3)
                         .foregroundStyle(.secondary)
@@ -85,8 +101,9 @@ struct WhatsNewView: View {
                             row(item)
                         }
                     }
-                    .padding(.top, 40)
-                    .frame(maxWidth: 420)
+                    .padding(.top, duoPose == .open ? 28 : 40)
+                    // Opened up it's short and wide, so each row takes fewer lines
+                    .frame(maxWidth: duoPose == .open ? 600 : 420)
                 }
                 .padding(.horizontal, 32)
                 .frame(maxWidth: .infinity)

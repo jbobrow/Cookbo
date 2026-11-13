@@ -192,15 +192,21 @@ struct CookbookSwitcherView: View {
     }
 }
 
-/// Cookbo's About page: the one all of Jon's apps share, with rows for the
-/// walkthrough from first launch and the sites recipes can be imported
-/// from, and where this device keeps them.
+/// Cookbo's About page: the one all of Jon's apps share, with rows for what's
+/// new, the walkthrough from first launch and the sites recipes can be
+/// imported from, and where this device keeps them.
 struct CookboAboutView: View {
     @EnvironmentObject var store: RecipeStore
     @State private var showingHowItWorks = false
+    @State private var showingWhatsNew = false
 
     var body: some View {
         AboutView(app: app) {
+            if WhatsNew.latest != nil {
+                AboutRow(title: "What's New", systemImage: "sparkles") {
+                    showingWhatsNew = true
+                }
+            }
             AboutRow(title: "How it works", systemImage: "questionmark.circle") {
                 showingHowItWorks = true
             }
@@ -212,6 +218,11 @@ struct CookboAboutView: View {
         #endif
         .welcomeCover(isPresented: $showingHowItWorks) {
             WelcomeView(isReplay: true)
+        }
+        .welcomeCover(isPresented: $showingWhatsNew) {
+            if let latest = WhatsNew.latest {
+                WhatsNewView(whatsNew: latest)
+            }
         }
     }
 

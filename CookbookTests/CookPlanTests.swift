@@ -127,6 +127,36 @@ final class CookPlanTests: XCTestCase {
         XCTAssertTrue(CookPlanner.parseIngredient("¼ cup roughly chopped fresh basil + additional for garnish").terms.contains("basil"))
     }
 
+    func testParseIngredient_commaBetweenDescriptionsStaysInTheName() {
+        let thighs = CookPlanner.parseIngredient("2 pounds bone-in, skin-on chicken thighs, trimmed")
+        XCTAssertEqual(thighs.amount, "2 lb")
+        XCTAssertEqual(thighs.name, "bone-in, skin-on chicken thighs")
+        XCTAssertEqual(thighs.note, "trimmed")
+        XCTAssertTrue(thighs.terms.contains("chicken thighs"))
+        XCTAssertTrue(thighs.terms.contains("thighs"))
+
+        XCTAssertEqual(CookPlanner.parseIngredient("1 pound boneless, skinless chicken breasts").name, "boneless, skinless chicken breasts")
+        XCTAssertEqual(CookPlanner.parseIngredient("3 large, ripe tomatoes, cored").name, "large, ripe tomatoes")
+        XCTAssertEqual(CookPlanner.parseIngredient("1 (4 pound) bone-in, skin-on chicken").name, "bone-in, skin-on chicken")
+
+        let butter = CookPlanner.parseIngredient("4 tablespoons cold, unsalted butter, plus more for serving")
+        XCTAssertEqual(butter.name, "cold, unsalted butter")
+        XCTAssertTrue(butter.isReusable)
+    }
+
+    func testParseIngredient_commaAfterTheNameStillEndsIt() {
+        XCTAssertEqual(CookPlanner.parseIngredient("1 large onion, diced").name, "large onion")
+        XCTAssertEqual(CookPlanner.parseIngredient("1 red onion, cut into wedges").note, "cut into wedges")
+        XCTAssertEqual(CookPlanner.parseIngredient("2 tablespoons butter, softened").name, "butter")
+
+        // Nothing's named after the comma, so it isn't holding the name together
+        let large = CookPlanner.parseIngredient("2 large, peeled and halved")
+        XCTAssertEqual(large.name, "large")
+        XCTAssertEqual(large.note, "peeled and halved")
+        XCTAssertEqual(CookPlanner.parseIngredient("1 cup chopped, divided").name, "chopped")
+        XCTAssertEqual(CookPlanner.parseIngredient("1 medium, cut into wedges").note, "cut into wedges")
+    }
+
     func testParseIngredient_mixedFraction() {
         XCTAssertEqual(CookPlanner.parseIngredient("1 1/2 cups flour").amount, "1½ cups")
     }

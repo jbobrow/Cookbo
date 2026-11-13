@@ -63,13 +63,12 @@ struct ImportRecipeFromURLView: View {
     @State private var parsedRecipe: RecipeURLImporter.ParsedRecipe?
     @State private var previewImageData: Data?
     @State private var showingPDFPicker = false
-    @Binding private var choosingPDF: Bool
+    private let initialPDF: URL?
 
-    /// `choosingPDF` opens the file picker straight away, for Add from PDF.
-    /// It's a binding so the sheet sees it set in the same tap that opens it.
-    init(initialURL: String = "", choosingPDF: Binding<Bool> = .constant(false)) {
+    /// `initialPDF` is a file already picked, from Add from PDF.
+    init(initialURL: String = "", initialPDF: URL? = nil) {
         _urlString = State(initialValue: initialURL)
-        _choosingPDF = choosingPDF
+        self.initialPDF = initialPDF
     }
 
     var body: some View {
@@ -126,14 +125,9 @@ struct ImportRecipeFromURLView: View {
             .onAppear {
                 if !urlString.isEmpty && parsedRecipe == nil {
                     fetchRecipe()
+                } else if let initialPDF, parsedRecipe == nil {
+                    importPDF(.success(initialPDF))
                 }
-            }
-            .task {
-                // A picker asked for while this sheet is still rising never shows
-                guard choosingPDF, urlString.isEmpty, parsedRecipe == nil else { return }
-                try? await Task.sleep(for: .milliseconds(450))
-                choosingPDF = false
-                showingPDFPicker = true
             }
             .fileImporter(isPresented: $showingPDFPicker, allowedContentTypes: [.pdf]) { result in
                 importPDF(result)

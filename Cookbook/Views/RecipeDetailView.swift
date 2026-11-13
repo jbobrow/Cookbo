@@ -14,12 +14,16 @@ struct RecipeDetailView: View {
     @State private var showingCookedConfirmation = false
     @State private var editingCategory: Category?
     @State private var isCooking = false
+    /// An iPhone Duo opened like a book.
+    @State private var isSpread = false
     @State private var cookingEnteredByRotation = false
     @State private var isVisible = false
     @Environment(\.dismiss) private var dismiss
     #if os(macOS)
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
     #endif
+    @Environment(\.duoPose) private var duoPose
+    @Environment(\.cameraStrip) private var cameraStrip
 
     private var accentColor: Color {
         if let categoryID = recipe.categoryID,
@@ -41,327 +45,28 @@ struct RecipeDetailView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let spine = geometry.spine()
             ZStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                // Recipe Image (edge-to-edge)
-                if let imageData = recipe.imageData,
-                   let image = createPlatformImage(from: imageData) {
-                    Color.clear
-                        .frame(height: 300)
-                        .overlay {
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        }
-                        .clipped()
-                        .id("top")
+                if let spine {
+                    spread(spine: spine)
                 } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 300)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .font(.system(size: 60))
-                                .foregroundColor(.gray)
-                        )
-                        .id("top")
+                    singleColumn(width: geometry.size.width)
                 }
 
-                // Content with padding
-                VStack(alignment: .leading, spacing: 20) {
-                    // Title and Rating
-                VStack(alignment: .leading, spacing: 8) {
-                    #if os(macOS)
-                    Text(recipe.title)
-                        .font(.system(size: 34 * textSizeMultiplier))
-                        .bold()
-                    #else
-                    Text(recipe.title)
-                        .font(.largeTitle)
-                        .bold()
-                    #endif
-                    
-                    HStack(spacing: 16) {
-                        // Star Rating
-                        HStack(spacing: 4) {
-                            ForEach(1...5, id: \.self) { star in
-                                Button(action: {
-                                    recipe.rating = recipe.rating == star ? 0 : star
-                                    store.saveRecipe(recipe)
-                                }) {
-                                    Image(systemName: star <= recipe.rating ? "star.fill" : "star")
-                                        .foregroundColor(star <= recipe.rating ? .yellow : .gray)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        
-                        // Times
-                        if recipe.prepDuration > 0 {
-                            Label(formatDuration(recipe.prepDuration), systemImage: "clock")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        if recipe.cookDuration > 0 {
-                            Label(formatDuration(recipe.cookDuration), systemImage: "flame")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    // Source URL
-                    if !recipe.sourceURL.isEmpty {
-                        if let url = URL(string: recipe.sourceURL) {
-                            Link(destination: url) {
-                                Label("View Source", systemImage: "link")
-                                    .font(.subheadline)
-                                    .foregroundColor(accentColor)
-                            }
-                        }
-                    }
-                    
-                    // Dates cooked
-                    if !recipe.datesCooked.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Cooked \(recipe.datesCooked.count) time\(recipe.datesCooked.count == 1 ? "" : "s")")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            if let lastCooked = recipe.datesCooked.max() {
-                                Text("Last: \(lastCooked, style: .date)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
+                if showingCookedConfirmation {
+                    cookedToast(spine: spine, in: geometry)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
-
-                // Cook mode
-                if !recipe.directions.isEmpty {
-                    VStack(spacing: 8) {
-                        Button(action: { startCooking(byRotation: false) }) {
-                            Label(cookButtonTitle, systemImage: "play.fill")
-                                .font(.title3)
-                                .fontWeight(.semibold)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .padding(.horizontal)
-                                .background(accentColor)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
-                        }
-                        .buttonStyle(.plain)
-
-                        #if os(iOS)
-                        if UIDevice.current.userInterfaceIdiom == .phone {
-                            Label("Or turn your phone sideways", systemImage: "rotate.right")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                        #endif
-                    }
-                }
-                
-                Divider()
-                
-                // Ingredients
-                VStack(alignment: .leading, spacing: 12) {
-                    #if os(macOS)
-                    Text("Ingredients")
-                        .font(.system(size: 22 * textSizeMultiplier))
-                        .bold()
-                    #else
-                    Text("Ingredients")
-                        .font(.title2)
-                        .bold()
-                    #endif
-
-                    ForEach($recipe.ingredientSections) { $section in
-                        if !section.name.isEmpty {
-                            Text(section.name)
-                                .font(.headline)
-                                .foregroundColor(.secondary)
-                                .padding(.top, 4)
-                        }
-                        ForEach($section.ingredients) { $ingredient in
-                            Button(action: {
-                                ingredient.isChecked.toggle()
-                                store.saveRecipe(recipe)
-                            }) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: ingredient.isChecked ? "checkmark.circle.fill" : "circle")
-                                        .foregroundColor(ingredient.isChecked ? .green : .gray)
-                                        .font(.title3)
-
-                                    #if os(macOS)
-                                    Text(ingredient.text.sanitizedForDisplay)
-                                        .font(.system(size: 17 * textSizeMultiplier))
-                                        .foregroundColor(.primary)
-                                        .strikethrough(ingredient.isChecked)
-                                        .opacity(ingredient.isChecked ? 0.6 : 1.0)
-                                    #else
-                                    Text(ingredient.text.sanitizedForDisplay)
-                                        .foregroundColor(.primary)
-                                        .strikethrough(ingredient.isChecked)
-                                        .opacity(ingredient.isChecked ? 0.6 : 1.0)
-                                    #endif
-
-                                    Spacer()
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button(action: {
-                                    ingredientToAddToReminders = ingredient
-                                }) {
-                                    Label("Add to Reminders", systemImage: "list.bullet")
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                Divider()
-                
-                // Directions
-                VStack(alignment: .leading, spacing: 12) {
-                    #if os(macOS)
-                    Text("Directions")
-                        .font(.system(size: 22 * textSizeMultiplier))
-                        .bold()
-                    #else
-                    Text("Directions")
-                        .font(.title2)
-                        .bold()
-                    #endif
-                    
-                    ForEach($recipe.directions.sorted(by: { $0.wrappedValue.order < $1.wrappedValue.order })) { $direction in
-                        HStack(alignment: .top, spacing: 12) {
-                            Button(action: {
-                                direction.isCompleted.toggle()
-                                store.saveRecipe(recipe)
-                            }) {
-                                #if os(macOS)
-                                Group {
-                                    if direction.isCompleted {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 14 * textSizeMultiplier, weight: .bold))
-                                            .foregroundColor(accentColor)
-                                            .frame(width: 28 * textSizeMultiplier, height: 28 * textSizeMultiplier)
-                                    } else {
-                                        Text("\(direction.order)")
-                                            .font(.system(size: 17 * textSizeMultiplier))
-                                            .foregroundColor(.white)
-                                            .frame(width: 28 * textSizeMultiplier, height: 28 * textSizeMultiplier)
-                                            .background(Circle().fill(accentColor))
-                                    }
-                                }
-                                #else
-                                Group {
-                                    if direction.isCompleted {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 14, weight: .bold))
-                                            .foregroundColor(accentColor)
-                                            .frame(width: 28, height: 28)
-                                    } else {
-                                        Text("\(direction.order)")
-                                            .font(.headline)
-                                            .foregroundColor(.white)
-                                            .frame(width: 28, height: 28)
-                                            .background(Circle().fill(accentColor))
-                                    }
-                                }
-                                #endif
-                            }
-                            .buttonStyle(.plain)
-
-                            #if os(macOS)
-                            Text(direction.text.sanitizedForDisplay)
-                                .font(.system(size: 17 * textSizeMultiplier))
-                                .foregroundColor(direction.isCompleted ? .secondary : .primary)
-                            #else
-                            Text(direction.text.sanitizedForDisplay)
-                                .foregroundColor(direction.isCompleted ? .secondary : .primary)
-                            #endif
-
-                            Spacer()
-                        }
-                    }
-                }
-                
-                // Notes
-                if !recipe.notes.isEmpty {
-                    Divider()
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        #if os(macOS)
-                        Text("Notes")
-                            .font(.system(size: 22 * textSizeMultiplier))
-                            .bold()
-
-                        Text(recipe.notes.sanitizedForDisplay)
-                            .font(.system(size: 17 * textSizeMultiplier))
-                            .foregroundColor(.secondary)
-                        #else
-                        Text("Notes")
-                            .font(.title2)
-                            .bold()
-
-                        Text(recipe.notes.sanitizedForDisplay)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        #endif
-                    }
-                }
-                
-                    // Mark as Cooked Button
-                    Button(action: { markAsCooked(scrollProxy: proxy) }) {
-                        Label("Mark as Cooked", systemImage: "checkmark.circle")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .padding(.horizontal)
-                            .background(accentColor)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 8)
-                }
-                .padding(.vertical)
-                .padding(.horizontal, horizontalPadding(for: geometry.size.width))
-                .frame(maxWidth: 900)
-                .frame(maxWidth: .infinity)
-                    }
-                }
-            }
-
-            // "Marked as Cooked" toast overlay
-            if showingCookedConfirmation {
-                VStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(accentColor)
-                        .symbolEffect(.bounce, value: showingCookedConfirmation)
-                    Text("Marked as Cooked")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    Text("Reset and ready for next time")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .padding(24)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
-            }
             }
         }
+        .onGeometryChange(for: Bool.self, of: { $0.spine() != nil }) { isSpread = $0 }
+        // Folded shut, the page can run under the camera band
+        .cameraStripPage()
         .navigationTitle("")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        // Opened like a book, the spread has buttons of its own, one to a page
+        .toolbar(isSpread ? .hidden : .automatic, for: .navigationBar)
         #endif
         .toolbar {
             #if os(macOS)
@@ -375,71 +80,48 @@ struct RecipeDetailView: View {
                 .buttonStyle(.plain)
             }
             #endif
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
+            ToolbarItemGroup(placement: .primaryAction) {
+                // Folded shut and tall, the camera band has room to stand the
+                // page's buttons apart. Anywhere else, and wide, where they'd
+                // be over the page, they gather in the menu.
+                if cameraStrip?.rails == true {
+                    if !recipe.directions.isEmpty {
+                        Button(action: { startCooking(byRotation: false) }) {
+                            Image(systemName: "play.fill")
+                        }
+                        .accessibilityLabel(cookButtonTitle)
+                    }
                     Button(action: { showingEditSheet = true }) {
-                        Label("Edit", systemImage: "pencil")
+                        Image(systemName: "pencil")
                     }
-                    
+                    .accessibilityLabel("Edit")
                     Button(action: shareRecipe) {
-                        Label("Share Recipe", systemImage: "square.and.arrow.up")
+                        Image(systemName: "square.and.arrow.up")
                     }
-
-                    Button(action: toggleThisWeek) {
-                        if recipe.isInThisWeek {
-                            Label("Remove from This Week", systemImage: "calendar.badge.minus")
-                        } else {
-                            Label("Add to This Week", systemImage: "calendar.badge.plus")
-                        }
-                    }
-
+                    .accessibilityLabel("Share Recipe")
                     Menu {
-                        Button(action: {
-                            recipe.categoryID = nil
-                            store.saveRecipe(recipe)
-                        }) {
-                            if recipe.categoryID == nil {
-                                Label("None", systemImage: "checkmark")
-                            } else {
-                                Text("None")
-                            }
-                        }
-
-                        Divider()
-
-                        ForEach(store.categories) { category in
-                            Button(action: {
-                                recipe.categoryID = category.id
-                                store.saveRecipe(recipe)
-                            }) {
-                                if recipe.categoryID == category.id {
-                                    Label(category.name, systemImage: "checkmark")
-                                } else {
-                                    Text(category.name)
-                                }
-                            }
-                        }
-
-                        Divider()
-
-                        Button(action: {
-                            editingCategory = Category(name: "", colorHex: "#289CFF")
-                        }) {
-                            Label("New Category", systemImage: "plus")
-                        }
+                        moreMenuItems
                     } label: {
-                        Label("Category", systemImage: "folder")
+                        Image(systemName: "ellipsis")
                     }
-
-                    Divider()
-
-                    Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
-                        Label("Delete Recipe", systemImage: "trash")
+                    .accessibilityLabel("More")
+                } else {
+                    Menu {
+                        allMenuItems
+                    } label: {
+                        Image(systemName: cameraStrip != nil ? "ellipsis" : "ellipsis.circle")
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
                 }
             }
+            #if os(iOS)
+            // The way between tall and wide, at the foot of the band under
+            // the thumb
+            if cameraStrip != nil {
+                ToolbarItem(placement: .bottomBar) {
+                    CameraStripToggleButton()
+                }
+            }
+            #endif
         }
         .onAppear {
             store.markViewed(recipe)
@@ -454,9 +136,10 @@ struct RecipeDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             // The recipe page stays upright on iPhone, so watch the phone
             // itself: turning it sideways opens cook mode, and turning it back
-            // closes it (handled in CookModeView).
+            // closes it (handled in CookModeView). Not on an iPhone Duo
+            // opened up, where the page turns with it.
             guard UIDevice.current.orientation.isLandscape,
-                  UIDevice.current.userInterfaceIdiom == .phone,
+                  OrientationLock.phoneTurnsToCook,
                   isVisible, !isCooking, !showingEditSheet, editingCategory == nil,
                   !recipe.directions.isEmpty else { return }
             startCooking(byRotation: true)
@@ -522,6 +205,510 @@ struct RecipeDetailView: View {
         }
     }
     
+    // MARK: - Layouts
+
+    /// The recipe as one column, top to bottom.
+    private func singleColumn(width: CGFloat) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Recipe Image (edge-to-edge)
+                    heroImage(height: 300)
+                        .id("top")
+
+                    // Content with padding
+                    VStack(alignment: .leading, spacing: 20) {
+                        titleBlock
+                        cookBlock
+                        Divider()
+                        ingredientsSection
+                        Divider()
+                        directionsSection
+                        notesSection
+                        markCookedButton(scrollProxy: proxy)
+                    }
+                    .padding(.vertical)
+                    .padding(.horizontal, horizontalPadding(for: width))
+                    .frame(maxWidth: 900)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            // Folded shut, the bar's buttons are in the camera band, so the
+            // picture can run right up to the top of the glass
+            .ignoresSafeArea(.container, edges: cameraStrip != nil ? .top : [])
+        }
+    }
+
+    /// An iPhone Duo opened like a book: what you need on the left-hand
+    /// page, what to do with it on the right, with the crease for a gutter.
+    /// Each page scrolls on its own, so the ingredients stay in view while
+    /// you read down the directions.
+    private func spread(spine: CGRect) -> some View {
+        HStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    heroImage(height: 240)
+
+                    VStack(alignment: .leading, spacing: 20) {
+                        titleBlock
+                        cookBlock
+                        Divider()
+                        ingredientsSection
+                    }
+                    .padding(.vertical)
+                    .padding(.horizontal, 28)
+                }
+            }
+            .frame(width: spine.minX)
+            // The picture runs right up to the top of the glass
+            .ignoresSafeArea(.container, edges: .top)
+            .overlay(alignment: .topLeading) {
+                RailButton(symbol: "chevron.left", label: "Back") { dismiss() }
+                    .padding(.duoCorner)
+            }
+            // With the navigation bar hidden the system's swipe back goes too
+            .overlay(alignment: .leading) {
+                Color.clear
+                    .frame(width: 16)
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 20).onEnded { drag in
+                        if drag.translation.width > 60 { dismiss() }
+                    })
+            }
+
+            Color.clear
+                .frame(width: spine.width)
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        directionsSection
+                            .id("top")
+                        notesSection
+                        markCookedButton(scrollProxy: proxy)
+                    }
+                    // Past the height of the page's menu, beside the heading
+                    .padding(.top, 35)
+                    .padding(.bottom)
+                    .padding(.horizontal, 28)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .topTrailing) {
+                Menu {
+                    allMenuItems
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 48, height: 48)
+                        .contentShape(Circle())
+                        .duoGlass()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("More")
+                .padding(.duoCorner)
+            }
+        }
+    }
+
+    // MARK: - Sections
+
+    @ViewBuilder
+    private func heroImage(height: CGFloat) -> some View {
+        if let imageData = recipe.imageData,
+           let image = createPlatformImage(from: imageData) {
+            Color.clear
+                .frame(height: height)
+                .overlay {
+                    image
+                        .resizable()
+                        .scaledToFill()
+                }
+                .clipped()
+        } else {
+            Rectangle()
+                .fill(Color.gray.opacity(0.2))
+                .frame(height: height)
+                .overlay(
+                    Image(systemName: "photo")
+                        .font(.system(size: 60))
+                        .foregroundColor(.gray)
+                )
+        }
+    }
+
+    /// Title and rating, times, source and dates cooked.
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            #if os(macOS)
+            Text(recipe.title)
+                .font(.system(size: 34 * textSizeMultiplier))
+                .bold()
+            #else
+            Text(recipe.title)
+                .font(.largeTitle)
+                .bold()
+            #endif
+
+            HStack(spacing: 16) {
+                // Star Rating
+                HStack(spacing: 4) {
+                    ForEach(1...5, id: \.self) { star in
+                        Button(action: {
+                            recipe.rating = recipe.rating == star ? 0 : star
+                            store.saveRecipe(recipe)
+                        }) {
+                            Image(systemName: star <= recipe.rating ? "star.fill" : "star")
+                                .foregroundColor(star <= recipe.rating ? .yellow : .gray)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                // Times
+                if recipe.prepDuration > 0 {
+                    Label(formatDuration(recipe.prepDuration), systemImage: "clock")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+
+                if recipe.cookDuration > 0 {
+                    Label(formatDuration(recipe.cookDuration), systemImage: "flame")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Source URL
+            if !recipe.sourceURL.isEmpty {
+                if let url = URL(string: recipe.sourceURL) {
+                    Link(destination: url) {
+                        Label("View Source", systemImage: "link")
+                            .font(.subheadline)
+                            .foregroundColor(accentColor)
+                    }
+                }
+            }
+
+            // Dates cooked
+            if !recipe.datesCooked.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Cooked \(recipe.datesCooked.count) time\(recipe.datesCooked.count == 1 ? "" : "s")")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    if let lastCooked = recipe.datesCooked.max() {
+                        Text("Last: \(lastCooked, style: .date)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Cook mode
+    @ViewBuilder
+    private var cookBlock: some View {
+        if !recipe.directions.isEmpty {
+            VStack(spacing: 8) {
+                Button(action: { startCooking(byRotation: false) }) {
+                    Label(cookButtonTitle, systemImage: "play.fill")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .padding(.horizontal)
+                        .background(accentColor)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                }
+                .buttonStyle(.plain)
+
+                #if os(iOS)
+                // Not on an iPhone Duo opened up, where turning it only
+                // turns the page
+                if UIDevice.current.userInterfaceIdiom == .phone, duoPose != .open {
+                    Label("Or turn your phone sideways", systemImage: "rotate.right")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                #endif
+            }
+        }
+    }
+
+    private var ingredientsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            #if os(macOS)
+            Text("Ingredients")
+                .font(.system(size: 22 * textSizeMultiplier))
+                .bold()
+            #else
+            Text("Ingredients")
+                .font(.title2)
+                .bold()
+            #endif
+
+            ForEach($recipe.ingredientSections) { $section in
+                if !section.name.isEmpty {
+                    Text(section.name)
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 4)
+                }
+                ForEach($section.ingredients) { $ingredient in
+                    Button(action: {
+                        ingredient.isChecked.toggle()
+                        store.saveRecipe(recipe)
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: ingredient.isChecked ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(ingredient.isChecked ? .green : .gray)
+                                .font(.title3)
+
+                            #if os(macOS)
+                            Text(ingredient.text.sanitizedForDisplay)
+                                .font(.system(size: 17 * textSizeMultiplier))
+                                .foregroundColor(.primary)
+                                .strikethrough(ingredient.isChecked)
+                                .opacity(ingredient.isChecked ? 0.6 : 1.0)
+                            #else
+                            Text(ingredient.text.sanitizedForDisplay)
+                                .foregroundColor(.primary)
+                                .strikethrough(ingredient.isChecked)
+                                .opacity(ingredient.isChecked ? 0.6 : 1.0)
+                            #endif
+
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(action: {
+                            ingredientToAddToReminders = ingredient
+                        }) {
+                            Label("Add to Reminders", systemImage: "list.bullet")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var directionsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            #if os(macOS)
+            Text("Directions")
+                .font(.system(size: 22 * textSizeMultiplier))
+                .bold()
+            #else
+            Text("Directions")
+                .font(.title2)
+                .bold()
+            #endif
+
+            ForEach($recipe.directions.sorted(by: { $0.wrappedValue.order < $1.wrappedValue.order })) { $direction in
+                HStack(alignment: .top, spacing: 12) {
+                    Button(action: {
+                        direction.isCompleted.toggle()
+                        store.saveRecipe(recipe)
+                    }) {
+                        #if os(macOS)
+                        Group {
+                            if direction.isCompleted {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 14 * textSizeMultiplier, weight: .bold))
+                                    .foregroundColor(accentColor)
+                                    .frame(width: 28 * textSizeMultiplier, height: 28 * textSizeMultiplier)
+                            } else {
+                                Text("\(direction.order)")
+                                    .font(.system(size: 17 * textSizeMultiplier))
+                                    .foregroundColor(.white)
+                                    .frame(width: 28 * textSizeMultiplier, height: 28 * textSizeMultiplier)
+                                    .background(Circle().fill(accentColor))
+                            }
+                        }
+                        #else
+                        Group {
+                            if direction.isCompleted {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(accentColor)
+                                    .frame(width: 28, height: 28)
+                            } else {
+                                Text("\(direction.order)")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .frame(width: 28, height: 28)
+                                    .background(Circle().fill(accentColor))
+                            }
+                        }
+                        #endif
+                    }
+                    .buttonStyle(.plain)
+
+                    #if os(macOS)
+                    Text(direction.text.sanitizedForDisplay)
+                        .font(.system(size: 17 * textSizeMultiplier))
+                        .foregroundColor(direction.isCompleted ? .secondary : .primary)
+                    #else
+                    Text(direction.text.sanitizedForDisplay)
+                        .foregroundColor(direction.isCompleted ? .secondary : .primary)
+                    #endif
+
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var notesSection: some View {
+        if !recipe.notes.isEmpty {
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                #if os(macOS)
+                Text("Notes")
+                    .font(.system(size: 22 * textSizeMultiplier))
+                    .bold()
+
+                Text(recipe.notes.sanitizedForDisplay)
+                    .font(.system(size: 17 * textSizeMultiplier))
+                    .foregroundColor(.secondary)
+                #else
+                Text("Notes")
+                    .font(.title2)
+                    .bold()
+
+                Text(recipe.notes.sanitizedForDisplay)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                #endif
+            }
+        }
+    }
+
+    private func markCookedButton(scrollProxy proxy: ScrollViewProxy) -> some View {
+        Button(action: { markAsCooked(scrollProxy: proxy) }) {
+            Label("Mark as Cooked", systemImage: "checkmark.circle")
+                .font(.title3)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .padding(.horizontal)
+                .background(accentColor)
+                .foregroundColor(.white)
+                .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 8)
+    }
+
+    /// "Marked as Cooked", over the page. Opened like a book it's on the
+    /// right-hand page, where Mark as Cooked is, rather than on the crease;
+    /// stood up like a laptop it's on the upright half.
+    @ViewBuilder
+    private func cookedToast(spine: CGRect?, in geometry: GeometryProxy) -> some View {
+        if let spine {
+            cookedToastCard
+                .frame(width: geometry.size.width - spine.maxX)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        } else {
+            cookedToastCard
+                .centeredAboveFold(geometry.laptopFold)
+        }
+    }
+
+    private var cookedToastCard: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 48))
+                .foregroundColor(accentColor)
+                .symbolEffect(.bounce, value: showingCookedConfirmation)
+            Text("Marked as Cooked")
+                .font(.headline)
+                .foregroundColor(.primary)
+            Text("Reset and ready for next time")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .padding(24)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// This Week, the category and Delete: the rest of the recipe's menu,
+    /// after Edit and Share.
+    @ViewBuilder
+    private var allMenuItems: some View {
+        Button(action: { showingEditSheet = true }) {
+            Label("Edit", systemImage: "pencil")
+        }
+
+        Button(action: shareRecipe) {
+            Label("Share Recipe", systemImage: "square.and.arrow.up")
+        }
+
+        moreMenuItems
+    }
+
+    @ViewBuilder
+    private var moreMenuItems: some View {
+        Button(action: toggleThisWeek) {
+            if recipe.isInThisWeek {
+                Label("Remove from This Week", systemImage: "calendar.badge.minus")
+            } else {
+                Label("Add to This Week", systemImage: "calendar.badge.plus")
+            }
+        }
+
+        Menu {
+            Button(action: {
+                recipe.categoryID = nil
+                store.saveRecipe(recipe)
+            }) {
+                if recipe.categoryID == nil {
+                    Label("None", systemImage: "checkmark")
+                } else {
+                    Text("None")
+                }
+            }
+
+            Divider()
+
+            ForEach(store.categories) { category in
+                Button(action: {
+                    recipe.categoryID = category.id
+                    store.saveRecipe(recipe)
+                }) {
+                    if recipe.categoryID == category.id {
+                        Label(category.name, systemImage: "checkmark")
+                    } else {
+                        Text(category.name)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button(action: {
+                editingCategory = Category(name: "", colorHex: "#289CFF")
+            }) {
+                Label("New Category", systemImage: "plus")
+            }
+        } label: {
+            Label("Category", systemImage: "folder")
+        }
+
+        Divider()
+
+        Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
+            Label("Delete Recipe", systemImage: "trash")
+        }
+    }
+
     private func createPlatformImage(from data: Data) -> Image? {
         #if os(iOS)
         guard let uiImage = UIImage(data: data) else { return nil }
@@ -560,9 +747,11 @@ struct RecipeDetailView: View {
         cookStartStep = step
         cookingEnteredByRotation = byRotation
         // Turning the phone opens cook mode at once rather than sliding it up
-        // while the screen is still upright; it then turns sideways
+        // while the screen is still upright; it then turns sideways. So does an
+        // iPhone Duo, whose status bar is hidden: the system's slide would show
+        // it for a moment, whatever the page says.
         var transaction = Transaction()
-        transaction.disablesAnimations = byRotation
+        transaction.disablesAnimations = byRotation || duoPose != .none
         withTransaction(transaction) { isCooking = true }
     }
 

@@ -245,7 +245,7 @@ extension View {
         #if os(macOS)
         sheet(isPresented: isPresented, content: content)
         #else
-        fullScreenCover(isPresented: isPresented, content: content)
+        fullScreenCover(isPresented: isPresented) { content().duoCover() }
         #endif
     }
 }

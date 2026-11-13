@@ -485,7 +485,7 @@ nonisolated enum CookPlanner {
         }
 
         var head = text
-        if let comma = text.firstIndex(of: ",") {
+        if let comma = commaEndingName(in: text) {
             head = String(text[..<comma])
             let tail = text[text.index(after: comma)...].trimmingCharacters(in: .whitespaces)
             let lowered = tail.lowercased()
@@ -538,6 +538,27 @@ nonisolated enum CookPlanner {
             isReusable: isReusable,
             reuseNote: reuseNote
         )
+    }
+
+    /// The first comma usually ends the name, but in "2 pounds bone-in, skin-on
+    /// chicken thighs, trimmed" it's still on its way to the chicken.
+    private static func commaEndingName(in text: String) -> String.Index? {
+        let commas = text.indices.filter { text[$0] == "," }
+        var start = text.startIndex
+        for (position, comma) in commas.enumerated() {
+            // Only the first part can start with the amount
+            let part = position > 0 ? String(text[start..<comma]) : String(text[start..<comma]).replacingPattern(
+                "^\\s*(\(quantityPattern))(?:\\s+(\(unitPattern))\\b\\.?)?\\s+", with: "", caseInsensitive: true
+            )
+            let words = part.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+            start = text.index(after: comma)
+            let next = position + 1 < commas.count ? text[start..<commas[position + 1]] : text[start...]
+            let nextWords = next.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+            guard !words.isEmpty, words.allSatisfy(leadingDescriptors.contains),
+                  let first = nextWords.first, let last = nextWords.last,
+                  !notNames.contains(first), !leadingDescriptors.contains(last), !last.hasSuffix("ed") else { return comma }
+        }
+        return nil
     }
 
     /// Some imports lose the space after the amount: "1large egg", "4 to
@@ -892,7 +913,25 @@ nonisolated enum CookPlanner {
         "kosher", "sea", "flaky", "packed", "chopped", "minced", "sliced", "diced", "grated",
         "ground", "finely", "coarsely", "thinly", "roughly", "boneless", "skinless", "unsalted",
         "salted", "whole", "dried", "black", "softened", "melted", "ripe", "raw", "peeled",
-        "good", "quality", "good-quality", "plain", "a", "an", "of", "piece", "pieces"
+        "good", "quality", "good-quality", "plain", "a", "an", "of", "piece", "pieces",
+        "bone-in", "skin-on"
+    ]
+
+    /// Words that can stand before a comma with the name still to come:
+    /// "large, ripe tomatoes", "cold, unsalted butter".
+    private static let leadingDescriptors: Set<String> = descriptorWords
+        .subtracting(["a", "an", "of", "piece", "pieces"])
+        .union([
+            "aged", "baby", "center-cut", "cold", "cooked", "crisp", "crushed", "crusty", "cubed", "day-old", "dry",
+            "firm", "frozen", "full-fat", "halved", "hot", "juicy", "lean", "light", "low-fat", "low-moisture",
+            "low-sodium", "mild", "nonfat", "organic", "part-skim", "reduced-sodium", "roasted", "room-temperature",
+            "sharp", "shredded", "skin-off", "soft", "stale", "starchy", "tart", "thick", "thick-cut", "thin",
+            "thin-cut", "toasted", "unsweetened", "warm", "waxy", "young"
+        ])
+
+    /// How a line carries on after a comma when it isn't naming anything.
+    private static let notNames: Set<String> = [
+        "about", "and", "as", "at", "cut", "for", "if", "into", "or", "plus", "see", "such", "then", "to"
     ]
 
     /// What the steps call a kind of thing: "blackberries or blueberries" are

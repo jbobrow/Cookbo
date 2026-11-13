@@ -8,6 +8,10 @@ import SwiftUI
 ///
 /// On iPhone it opens when you turn the phone sideways on a recipe page and
 /// closes when you turn it back; Start Cooking opens it anywhere.
+///
+/// On an iPhone Duo opened sideways, the ingredients are the left-hand page
+/// and the step the right; stood up like a laptop, the step is on the
+/// upright half and the buttons on the half lying on the counter.
 struct CookModeView: View {
     @EnvironmentObject private var store: RecipeStore
     @ObservedObject private var plans = CookPlanProvider.shared
@@ -21,6 +25,9 @@ struct CookModeView: View {
     #if os(iOS)
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
+    @Environment(\.duoPose) private var duoPose
+    @Environment(\.cameraStrip) private var cameraStrip
+    @Environment(\.controlsRailed) private var controlsRailed
     @AppStorage("cookModeShowsShortSteps") private var prefersShortSteps = true
     @AppStorage("cookModeNextTaps") private var nextTaps = 0
     @AppStorage("cookModeStartedTimer") private var hasStartedTimer = false
@@ -60,7 +67,7 @@ struct CookModeView: View {
         let fresh = startStep == nil && steps > 0 && !recipe.wrappedValue.directions.contains(where: \.isCompleted)
         _introPage = State(initialValue: fresh ? .overview : nil)
         #if os(iOS)
-        _contentShown = State(initialValue: !(enteredByRotation && UIDevice.current.userInterfaceIdiom == .phone))
+        _contentShown = State(initialValue: !(enteredByRotation && OrientationLock.phoneTurnsToCook))
         #else
         _contentShown = State(initialValue: true)
         #endif
@@ -110,48 +117,90 @@ struct CookModeView: View {
     var body: some View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
-            let scale = min(max((isLandscape ? geometry.size.height / 390 : geometry.size.width / 390), 1), 1.6)
+            // An iPhone Duo opened up has the room of an iPad but is read at a
+            // phone's distance, and a book's page is only a phone wide
+            let scale = min(max((isLandscape ? geometry.size.height / 390 : geometry.size.width / 390), 1), duoPose == .open ? 1.2 : 1.6)
+            let laptopFold = isLandscape ? nil : geometry.laptopFold
+            let spine = isLandscape ? geometry.spine(minimumPage: 280) : nil
+            // Opened flat there's no fold to work around, and the step takes
+            // two thirds of the glass
+            let stepSpine = spine.map {
+                geometry.fold == nil ? CGRect(x: geometry.size.width / 3, y: $0.minY, width: 0, height: $0.height) : $0
+            }
 
-            VStack(spacing: 12) {
-                topBar
-                progressBar
-                if let page = introPage {
-                    CookIntroView(
-                        page: page,
-                        overview: overview,
-                        prepTasks: prepTasks,
-                        prepped: $prepped,
-                        measureTasks: measureTasks,
-                        measured: $measured,
-                        accentColor: accentColor,
-                        isLandscape: isLandscape,
-                        drag: drag,
-                        pageKey: pageKey,
-                        onNext: { if !isSwiping { introNext() } },
-                        onBack: { if !isSwiping { withAnimation(.snappy) { introPage = .overview } } },
-                        onSkip: { withAnimation(.snappy) { introPage = nil } }
-                    )
-                    .id(page)
-                    .transition(.opacity)
-                } else if isCooked {
-                    cookedView
-                        .followsSwipe(drag, page: pageKey)
-                } else if isFinished {
-                    finishView(isLandscape: isLandscape)
-                        .followsSwipe(drag, page: pageKey)
-                } else if isLandscape {
-                    landscapeStep(scale: scale)
+            // The pages before them split down the middle of the glass, as
+            // close together as they like
+            let introSpine = spine.map {
+                geometry.fold == nil ? CGRect(x: geometry.size.width / 2, y: $0.minY, width: 0, height: $0.height) : $0
+            }
+
+            Group {
+                if let laptopFold, introPage == nil, !isCooked {
+                    if isFinished {
+                        laptopFinish(fold: laptopFold)
+                            .followsSwipe(drag, page: pageKey)
+                    } else {
+                        laptopStep(fold: laptopFold, scale: scale)
+                    }
                 } else {
-                    portraitStep(scale: scale)
+                    VStack(spacing: 12) {
+                        // Held like a book, a long name stops short of the crease
+                        topBar(titleWidth: geometry.fold == nil ? nil : spine.map(bookColumnWidth))
+                        progressBar
+                        if let page = introPage {
+                            CookIntroView(
+                                page: page,
+                                overview: overview,
+                                prepTasks: prepTasks,
+                                prepped: $prepped,
+                                measureTasks: measureTasks,
+                                measured: $measured,
+                                accentColor: accentColor,
+                                isLandscape: isLandscape,
+                                spine: introSpine,
+                                sideMargin: sideMargin(isLandscape: isLandscape),
+                                drag: drag,
+                                pageKey: pageKey,
+                                onNext: { if !isSwiping { introNext() } },
+                                onBack: { if !isSwiping { withAnimation(.snappy) { introPage = .overview } } },
+                                onSkip: { withAnimation(.snappy) { introPage = nil } }
+                            )
+                            .id(page)
+                            .transition(.opacity)
+                        } else if isCooked {
+                            cookedView(spine: spine)
+                                .centeredAboveFold(laptopFold)
+                                .followsSwipe(drag, page: pageKey)
+                        } else if isFinished {
+                            finishView(isLandscape: isLandscape, spine: spine)
+                                .followsSwipe(drag, page: pageKey)
+                        } else if isLandscape {
+                            landscapeStep(scale: scale, spine: stepSpine)
+                        } else {
+                            portraitStep(scale: scale, pageHeight: geometry.size.height)
+                        }
+                    }
                 }
             }
-            .padding(.horizontal, isLandscape ? 8 : 20)
-            .padding(.top, isLandscape ? 8 : 4)
-            .padding(.bottom, 8)
+            .padding(.horizontal, sideMargin(isLandscape: isLandscape))
+            // Folded shut the status bar is hidden, and the page starts at the
+            // very top of the glass
+            .padding(.top, duoPose == .open ? .duoCorner : cameraStrip != nil ? 20 : isLandscape ? 8 : 4)
+            // Opened up, the buttons sit as far from the bottom corner of the
+            // glass as the top ones do from theirs, past the safe area
+            .padding(.bottom, duoPose == .open ? .duoCorner - geometry.safeAreaInsets.bottom : 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
             .simultaneousGesture(swipe)
             .opacity(contentShown ? 1 : 0)
+            // Bending the glass or laying it flat slides the page between them
+            .animation(spine == nil ? nil : .snappy, value: geometry.fold == nil)
+        }
+        // Folded shut and tall, the way out stands in the camera band
+        .cameraStripPage {
+            RailButton(symbol: "xmark", label: "Leave Cook Mode") { close() }
+                .keyboardShortcut(.cancelAction)
+                .tint(Color.primary)
         }
         .background(.background)
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { drag.width = $0 }
@@ -200,7 +249,7 @@ struct CookModeView: View {
             // Opened by turning the phone, turning it back closes it. The
             // phone says so before the screen turns, so the cook can fade out
             // first and the screen turns with nothing on it.
-            guard enteredByRotation, UIDevice.current.userInterfaceIdiom == .phone,
+            guard enteredByRotation, OrientationLock.phoneTurnsToCook,
                   UIDevice.current.orientation == .portrait, screenIsLandscape else { return }
             close()
         }
@@ -213,48 +262,121 @@ struct CookModeView: View {
 
     // MARK: - Chrome
 
-    private var topBar: some View {
+    private func topBar(titleWidth: CGFloat? = nil) -> some View {
         HStack(spacing: 12) {
-            Button { close() } label: {
-                Image(systemName: "xmark")
-                    .font(.body.weight(.semibold))
-                    .frame(width: 44, height: 44)
-                    .background(.fill.tertiary, in: Circle())
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
-            .accessibilityLabel("Leave Cook Mode")
+            HStack(spacing: 12) {
+                // Folded shut and tall, it's in the camera band
+                if !controlsRailed { closeButton }
 
-            Text(recipe.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                recipeTitle
+            }
+            .frame(maxWidth: titleWidth, alignment: .leading)
 
             Spacer(minLength: 0)
 
-            // Timers from other steps keep running here; only Stop ends one
-            // The Dynamic Island and lock screen show system timers; without
-            // them, timers from other steps show here
-            if !timerStore.systemShowsTimers {
-                ForEach(timerStore.timers(for: recipe.id).filter { $0.step != stepIndex || isFinished }) { timer in
-                    CookTimerPill(timer: timer, tint: Self.timerTint)
+            timerStatus
+
+            pageLabel
+        }
+        .clearOfCameraStrip(cameraStrip)
+    }
+
+    /// The left-hand page: it starts at the margin, and its trailing 24pt
+    /// reach the crease.
+    private func bookColumnWidth(spine: CGRect) -> CGFloat {
+        max(spine.minX - sideMargin(isLandscape: true) - 24, 0)
+    }
+
+    private var recipeTitle: some View {
+        Text(recipe.title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+    }
+
+    private var pageLabel: some View {
+        Text(introPage == .overview ? "Overview" : introPage == .prep ? "Prep"
+             : isFinished ? "All done" : "Step \(stepIndex + 1) of \(directions.count)")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private var timerStatus: some View {
+        // Timers from other steps keep running here; only Stop ends one
+        // The Dynamic Island and lock screen show system timers; without
+        // them, timers from other steps show here
+        if !timerStore.systemShowsTimers {
+            ForEach(timerStore.timers(for: recipe.id).filter { $0.step != stepIndex || isFinished }) { timer in
+                CookTimerPill(timer: timer, tint: Self.timerTint)
+            }
+        }
+
+        // Any timer running, from any step or recipe, shows as a small
+        // blue status icon; tapping it lists them
+        CookTimersButton(tint: Self.timerTint, recipeID: recipe.id) { step in
+            showStep(step)
+        }
+    }
+
+    private var bookBackButton: some View {
+        Button { if !isSwiping { goBack() } } label: {
+            Image(systemName: "chevron.left")
+                .font(.body.weight(.semibold))
+                .frame(width: 44, height: 44)
+                .background(.fill.tertiary, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.leftArrow, modifiers: [])
+        .accessibilityLabel("Previous Step")
+    }
+
+    private var bookNextButton: some View {
+        Button { if !isSwiping { advance() } } label: {
+            HStack(spacing: 6) {
+                Text(nextLabel)
+                Image(systemName: "chevron.right")
+            }
+            .font(.body.weight(.bold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 18)
+            .frame(height: 44)
+            .background(accentColor, in: Capsule())
+            .contentShape(Capsule())
+            .fixedSize()
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.rightArrow, modifiers: [])
+    }
+
+    private var closeButton: some View {
+        roundButton(symbol: "xmark") { close() }
+            .keyboardShortcut(.cancelAction)
+            .accessibilityLabel("Leave Cook Mode")
+    }
+
+    private func roundButton(symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Group {
+                // Folded shut, glass like the rest of the camera band's buttons
+                if cameraStrip != nil {
+                    Image(systemName: symbol)
+                        .font(.body.weight(.semibold))
+                        .frame(width: 44, height: 44)
+                        .duoGlass()
+                } else {
+                    Image(systemName: symbol)
+                        .font(.body.weight(.semibold))
+                        .frame(width: 44, height: 44)
+                        .background(.fill.tertiary, in: Circle())
                 }
             }
-
-            // Any timer running, from any step or recipe, shows as a small
-            // blue status icon; tapping it lists them
-            CookTimersButton(tint: Self.timerTint, recipeID: recipe.id) { step in
-                showStep(step)
-            }
-
-            Text(introPage == .overview ? "Overview" : introPage == .prep ? "Prep"
-                 : isFinished ? "All done" : "Step \(stepIndex + 1) of \(directions.count)")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .fixedSize()
+            .contentShape(Circle())
         }
+        .buttonStyle(.plain)
     }
 
     private var progressBar: some View {
@@ -280,68 +402,138 @@ struct CookModeView: View {
         }
         .accessibilityElement()
         .accessibilityLabel("\(min(stepIndex, directions.count)) of \(directions.count) steps done")
+        .clearOfCameraStrip(cameraStrip)
     }
 
     // MARK: - Steps
 
-    private func landscapeStep(scale: CGFloat) -> some View {
-        VStack(spacing: 12) {
+    /// Opened up (`spine`), the ingredients are on the left and the step on
+    /// the right. Held like a book they're a page each, with the crease for
+    /// the rule between them.
+    private func landscapeStep(scale: CGFloat, spine: CGRect?) -> some View {
+        let columnWidth = spine.map(bookColumnWidth) ?? 228 * min(scale, 1.3)
+        return VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 0) {
-                // A long list scrolls rather than running off the bottom; each
-                // step starts at the top of its own
-                ScrollView(.vertical) {
-                    ingredientListContent
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 12) {
+                    // A long list scrolls rather than running off the bottom; each
+                    // step starts at the top of its own
+                    ScrollView(.vertical) {
+                        ingredientListContent
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            // A whole page to itself, to read from the counter
+                            .dynamicTypeSize(spine != nil ? DynamicTypeSize.xxxLarge... : DynamicTypeSize.xSmall...)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .id(stepIndex)
+                    .transition(.opacity)
+                    .fadesWithSwipe(drag, page: pageKey)
+
+                    if spine != nil { shortTextToggle }
                 }
-                .scrollBounceBehavior(.basedOnSize)
-                .id(stepIndex)
-                .transition(.opacity)
-                .fadesWithSwipe(drag, page: pageKey)
-                .frame(width: 228 * min(scale, 1.3), alignment: .leading)
+                .frame(width: columnWidth, alignment: .leading)
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(.trailing, 24)
                 .overlay(alignment: .trailing) {
                     Rectangle().fill(.separator).frame(width: 1)
+                        .opacity(spine?.width ?? 0 > 0 ? 0 : 1)
                 }
 
-                // Sliding step text is masked at the rule, not drawn over the
-                // ingredients (taller than the column so highlights aren't cut)
-                slidingStepText(size: fontSize(landscape: true) * scale, scrolls: true)
-                    .padding(.leading, 28)
+                VStack(spacing: 12) {
+                    // Sliding step text is masked at the rule, not drawn over the
+                    // ingredients (taller than the column so highlights aren't cut).
+                    // Opened up, with the buttons under it, a long step gets
+                    // smaller before it has to scroll.
+                    slidingStepText(size: fontSize(landscape: true) * scale, scrolls: spine == nil)
+
+                    if spine != nil {
+                        // Next in the corner
+                        HStack(spacing: 12) {
+                            Spacer(minLength: 0)
+                            nextHint
+                            bookBackButton
+                            bookNextButton
+                        }
+                    }
+                }
+                .padding(.leading, spine.map { $0.width + 24 } ?? 28)
             }
             .frame(maxHeight: .infinity)
 
-            HStack(spacing: 16) {
-                backButton(compact: false)
-                shortTextToggle
-                Spacer(minLength: 0)
-                nextHint
-                nextButton(fullWidth: false)
+            if spine == nil {
+                HStack(spacing: 16) {
+                    backButton(compact: false)
+                    shortTextToggle
+                    Spacer(minLength: 0)
+                    nextHint
+                    nextButton(fullWidth: false)
+                }
             }
         }
     }
 
-    private func portraitStep(scale: CGFloat) -> some View {
+    /// A phone turned sideways has the system's margins to lean on. An iPhone
+    /// Duo opened up has none, and the room for real ones.
+    private func sideMargin(isLandscape: Bool) -> CGFloat {
+        duoPose == .open ? 24 : isLandscape ? 8 : 20
+    }
+
+    private func portraitStep(scale: CGFloat, pageHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             if !currentStep.items.isEmpty {
-                ingredientList
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .fadesWithSwipe(drag, page: pageKey)
+                // The step is what's read from the counter, and it already
+                // highlights what goes in, so a long list gives way to it
+                HeightLimit(maxHeight: pageHeight * 0.28) {
+                    ingredientCard
+                }
             }
 
             shortTextToggle
 
-            slidingStepText(size: fontSize(landscape: false) * scale, scrolls: false)
+            // Opened up, there's no call for a long step to get smaller
+            slidingStepText(size: fontSize(landscape: false) * scale, scrolls: duoPose == .open)
 
             HStack(spacing: 12) {
                 backButton(compact: true)
                 nextButton(fullWidth: true)
             }
+            .clearOfCameraStrip(cameraStrip)
         }
         .padding(.top, 6)
+    }
+
+    /// Stood up like a laptop on the counter: the step on the upright half,
+    /// at reading distance, and what goes in with the buttons on the half
+    /// lying flat, under the hand. Nothing sits on the hinge.
+    private func laptopStep(fold: CGRect, scale: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                topBar()
+                progressBar
+                shortTextToggle
+                slidingStepText(size: fontSize(landscape: false) * scale, scrolls: true)
+            }
+            // The page starts 4pt down; the upper half ends at the fold
+            .frame(height: max(fold.minY - 4 - 12, 0), alignment: .top)
+            .padding(.bottom, 12)
+
+            Color.clear
+                .frame(height: fold.height)
+
+            VStack(spacing: 16) {
+                if !currentStep.items.isEmpty {
+                    ingredientCard
+                }
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 12) {
+                    backButton(compact: true)
+                    nextButton(fullWidth: true)
+                }
+            }
+            .padding(.top, 16)
+            .frame(maxHeight: .infinity)
+        }
     }
 
     private func fontSize(landscape: Bool) -> CGFloat {
@@ -381,14 +573,12 @@ struct CookModeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    /// How far a step's text may shrink to fit, largest first.
-    private static let fitScales: [CGFloat] = [1, 0.93, 0.86, 0.8, 0.74, 0.68, 0.62, 0.56, 0.5]
-
     /// The step's text, replaced with a slide when the step changes and
     /// moving with a swipe. The slide happens inside a clipped box, so in
     /// landscape the incoming text is cut off at the rule instead of passing
-    /// over the ingredients. In landscape a long step scrolls; in portrait it
-    /// takes the largest size that fits the room the ingredients leave.
+    /// over the ingredients. In landscape a long step scrolls at its full
+    /// size. Stacked, it gets smaller first, but only so far: past what can
+    /// be read from the counter, it scrolls too.
     private func slidingStepText(size: CGFloat, scrolls: Bool) -> some View {
         ZStack(alignment: .topLeading) {
             Group {
@@ -396,10 +586,15 @@ struct CookModeView: View {
                     ScrollView(.vertical) { stepText(size: size) }
                         .scrollBounceBehavior(.basedOnSize)
                 } else {
-                    // minimumScaleFactor on wrapped text drops straight to its
-                    // floor rather than to the size that would just fit
                     ViewThatFits(in: .vertical) {
-                        ForEach(Self.fitScales, id: \.self) { stepText(size: size * $0) }
+                        ForEach(Array(stride(from: size, to: Self.smallestStepSize, by: -2)), id: \.self) { size in
+                            stepText(size: size)
+                        }
+                        stepText(size: Self.smallestStepSize)
+
+                        ScrollView(.vertical) { stepText(size: Self.smallestStepSize) }
+                            .scrollBounceBehavior(.basedOnSize)
+                            .scrollIndicatorsFlash(onAppear: true)
                     }
                 }
             }
@@ -422,6 +617,9 @@ struct CookModeView: View {
             Text("Step \(timer.step + 1) · \(timer.label)")
         }
     }
+
+    /// The smallest a step gets before it scrolls instead.
+    private static let smallestStepSize: CGFloat = 22
 
     /// Timers are the system's, so they use the system's blue rather than
     /// the recipe's category color.
@@ -532,11 +730,40 @@ struct CookModeView: View {
 
     // MARK: - Ingredients
 
-    /// A new step brings a new list rather than reshaping the old rows.
-    private var ingredientList: some View {
-        ingredientListContent
-            .id(stepIndex)
-            .transition(.opacity)
+    /// As tall as the list, or scrolling once that's more than it has room
+    /// for. The rows run to the card's edge and fade out at its foot, to show
+    /// there are more. A new step brings a new list rather than reshaping the
+    /// old rows, and starts at the top of its own.
+    private var ingredientCard: some View {
+        ViewThatFits(in: .vertical) {
+            ingredientListContent
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+
+            ScrollView(.vertical) {
+                ingredientListContent
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+                    // The last row comes clear of the fade
+                    .padding(.bottom, 24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicatorsFlash(onAppear: true)
+            .mask {
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 24)
+                }
+            }
+        }
+        .id(stepIndex)
+        .transition(.opacity)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .fadesWithSwipe(drag, page: pageKey)
     }
 
     private var ingredientListContent: some View {
@@ -774,10 +1001,14 @@ struct CookModeView: View {
 
     // MARK: - Finishing
 
-    private func finishView(isLandscape: Bool) -> some View {
+    private func finishView(isLandscape: Bool, spine: CGRect?) -> some View {
         let layout = isLandscape
-            ? AnyLayout(HStackLayout(alignment: .center, spacing: 32))
+            ? AnyLayout(HStackLayout(alignment: .center, spacing: spine.map { $0.width + 48 } ?? 32))
             : AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+        // Opened like a book, the picture is the left-hand page and the rest
+        // the right, which is too narrow for the buttons side by side
+        let leftPage = spine.map { max($0.minX - sideMargin(isLandscape: true) - 24, 0) }
+        let buttonsInARow = isLandscape && spine == nil
 
         return layout {
             if let image = recipe.image {
@@ -786,53 +1017,89 @@ struct CookModeView: View {
                     .frame(width: isLandscape ? 236 : nil, height: 236)
                     .overlay { image.resizable().scaledToFill() }
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .frame(width: leftPage)
+            } else if let leftPage {
+                Color.clear
+                    .frame(width: leftPage, height: 0)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Time to eat.")
-                    .font(.largeTitle.weight(.bold))
-                Text("Mark it as cooked to add today to this recipe's history. The checkmarks reset for next time.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                let buttons = isLandscape ? AnyLayout(HStackLayout(spacing: 12)) : AnyLayout(VStackLayout(spacing: 10))
-                buttons {
-                    Button(action: markCooked) {
-                        Label("Mark as Cooked", systemImage: "checkmark.circle")
-                            .font(.title3.weight(.bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 24)
-                            .frame(maxWidth: isLandscape ? nil : .infinity, minHeight: 56)
-                            .background(accentColor, in: Capsule())
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.defaultAction)
-
-                    Button { close() } label: {
-                        Text("Not Now")
-                            .font(.body.weight(.semibold))
-                            .padding(.horizontal, 22)
-                            .frame(maxWidth: isLandscape ? nil : .infinity, minHeight: 52)
-                            .background(.fill.tertiary, in: Capsule())
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.top, 10)
-
-                Button("Back to the Last Step", action: goBack)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .buttonStyle(.plain)
-                    .padding(.top, 4)
-            }
+            finishText(buttonsInARow: buttonsInARow)
+                .frame(maxWidth: spine != nil ? .infinity : nil, alignment: .leading)
+                .clearOfCameraStrip(cameraStrip)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var cookedView: some View {
+    /// Stood up like a laptop: the picture on the upright half, and what to
+    /// do about it on the half under the hand.
+    private func laptopFinish(fold: CGRect) -> some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 12) {
+                topBar()
+                progressBar
+                if let image = recipe.image {
+                    Color.clear
+                        .overlay { image.resizable().scaledToFill() }
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                }
+            }
+            // The page starts 4pt down; the upper half ends at the fold
+            .frame(height: max(fold.minY - 4 - 12, 0), alignment: .top)
+            .padding(.bottom, 12)
+
+            Color.clear
+                .frame(height: fold.height)
+
+            finishText(buttonsInARow: false)
+                .padding(.top, 16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    private func finishText(buttonsInARow: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Time to eat.")
+                .font(.largeTitle.weight(.bold))
+            Text("Mark it as cooked to add today to this recipe's history. The checkmarks reset for next time.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            let buttons = buttonsInARow ? AnyLayout(HStackLayout(spacing: 12)) : AnyLayout(VStackLayout(spacing: 10))
+            buttons {
+                Button(action: markCooked) {
+                    Label("Mark as Cooked", systemImage: "checkmark.circle")
+                        .font(.title3.weight(.bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .frame(maxWidth: buttonsInARow ? nil : .infinity, minHeight: 56)
+                        .background(accentColor, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
+
+                Button { close() } label: {
+                    Text("Not Now")
+                        .font(.body.weight(.semibold))
+                        .padding(.horizontal, 22)
+                        .frame(maxWidth: buttonsInARow ? nil : .infinity, minHeight: 52)
+                        .background(.fill.tertiary, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 10)
+
+            Button("Back to the Last Step", action: goBack)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+        }
+    }
+
+    private func cookedView(spine: CGRect?) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "checkmark")
                 .font(.system(size: 36, weight: .bold))
@@ -847,6 +1114,8 @@ struct CookModeView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Opened like a book, on the right-hand page rather than the crease
+        .padding(.leading, spine.map { $0.maxX - sideMargin(isLandscape: true) } ?? 0)
     }
 
     private func markCooked() {
@@ -863,7 +1132,7 @@ struct CookModeView: View {
     /// upright; otherwise it slides away as usual.
     private func close() {
         #if os(iOS)
-        if UIDevice.current.userInterfaceIdiom == .phone, screenIsLandscape {
+        if OrientationLock.phoneTurnsToCook, screenIsLandscape {
             guard !closingUpright else { return }
             closingUpright = true
             withAnimation(.easeIn(duration: 0.15)) { contentShown = false }
@@ -964,6 +1233,24 @@ extension View {
     /// Fades while this page is being swiped, staying in place.
     func fadesWithSwipe(_ drag: PageDrag, page: String) -> some View {
         modifier(SwipeFollower(drag: drag, page: page, moves: false))
+    }
+}
+
+/// Offers its content no more than `maxHeight`. Unlike a frame, it stays the
+/// content's own size when that's shorter.
+private struct HeightLimit: Layout {
+    let maxHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        subviews[0].sizeThatFits(limited(proposal))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews[0].place(at: bounds.origin, proposal: limited(proposal))
+    }
+
+    private func limited(_ proposal: ProposedViewSize) -> ProposedViewSize {
+        ProposedViewSize(width: proposal.width, height: min(proposal.height ?? maxHeight, maxHeight))
     }
 }
 
