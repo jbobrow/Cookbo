@@ -23,6 +23,8 @@ struct WhatsNew {
                  detail: "Cookbo fits your iPhone Duo however you hold it: shut, open flat, like a book or stood up like a laptop."),
             Item(icon: "book", title: "Open like a book",
                  detail: "Your cookbook fills both pages, a recipe becomes a two-page spread, and cook mode gives the ingredients and the step a page each."),
+            Item(icon: "doc.text", title: "Recipes from PDFs",
+                 detail: "Add a recipe card, a handout or a saved page from a PDF, from the + menu or the share sheet."),
             Item(icon: "flame", title: "Cook mode, opened up",
                  detail: "Directions take two thirds of the screen, prep puts what to measure and cut side by side, and Next stays in the corner."),
             Item(icon: "textformat.size", title: "Easier to read while you cook",

@@ -39,11 +39,16 @@ struct RecipeParser {
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
 
-        let (data, _): (Data, URLResponse)
+        let (data, response): (Data, URLResponse)
         do {
-            (data, _) = try await URLSession.shared.data(for: request)
+            (data, response) = try await URLSession.shared.data(for: request)
         } catch {
             throw ParseError.networkError(error.localizedDescription)
+        }
+
+        // A link straight to a PDF, a recipe card or a printout
+        if response.mimeType == "application/pdf" || data.starts(with: Data("%PDF-".utf8)) {
+            return try RecipePDFReader.importRecipe(from: data, fileName: url.lastPathComponent, sourceURL: urlString)
         }
 
         guard let html = String(data: data, encoding: .utf8)

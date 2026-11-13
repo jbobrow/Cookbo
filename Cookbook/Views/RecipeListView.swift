@@ -24,6 +24,7 @@ struct RecipeListView: View {
     @State private var showingImportSheet = false
     @State private var showingImportCookbookSheet = false
     @State private var showingURLImport = false
+    @State private var importChoosesPDF = false
     @State private var showingSettings = false
     @State private var showingCookbookSwitcher = false
     @State private var importAlert: ImportAlert?
@@ -639,9 +640,10 @@ struct RecipeListView: View {
             RecipeEditView(recipe: Recipe())
         }
         .sheet(isPresented: $showingURLImport) {
-            ImportRecipeFromURLView(initialURL: store.pendingImportURL ?? "")
+            ImportRecipeFromURLView(initialURL: store.pendingImportURL ?? "", choosingPDF: $importChoosesPDF)
                 .onDisappear {
                     store.pendingImportURL = nil
+                    importChoosesPDF = false
                 }
         }
         .onChange(of: store.pendingCookStep) { _, _ in openPendingCookLink() }
@@ -781,6 +783,9 @@ struct RecipeListView: View {
                         Button(action: { showingURLImport = true }) {
                             Label("Add from URL", systemImage: "square.and.arrow.down")
                         }
+                        Button(action: { importChoosesPDF = true; showingURLImport = true }) {
+                            Label("Add from PDF", systemImage: "doc.text")
+                        }
                     } label: {
                         Label("Add", systemImage: "plus")
                             .labelStyle(.iconOnly)
@@ -845,6 +850,9 @@ struct RecipeListView: View {
                 Button(action: { showingURLImport = true }) {
                     Label("Add from URL", systemImage: "square.and.arrow.down")
                 }
+                Button(action: { importChoosesPDF = true; showingURLImport = true }) {
+                    Label("Add from PDF", systemImage: "doc.text")
+                }
             } label: {
                 Image(systemName: "plus")
             }
@@ -879,6 +887,9 @@ struct RecipeListView: View {
         }
         Button(action: { showingURLImport = true }) {
             Label("Add from URL", systemImage: "square.and.arrow.down")
+        }
+        Button(action: { importChoosesPDF = true; showingURLImport = true }) {
+            Label("Add from PDF", systemImage: "doc.text")
         }
     }
 
