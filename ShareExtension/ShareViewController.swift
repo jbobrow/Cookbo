@@ -1,4 +1,17 @@
 import Foundation
+import UniformTypeIdentifiers
+
+/// A PDF a share carries, read while the file the system hands over is
+/// still there.
+enum SharedPDF {
+    static func load(from provider: NSItemProvider, completion: @escaping @Sendable (Data?, String) -> Void) {
+        let suggestedName = provider.suggestedName
+        _ = provider.loadFileRepresentation(forTypeIdentifier: UTType.pdf.identifier) { url, _ in
+            let data = url.flatMap { try? Data(contentsOf: $0) }
+            completion(data, suggestedName ?? url?.lastPathComponent ?? "")
+        }
+    }
+}
 
 /// The web page a share carries, however the sharing app packed it. Safari
 /// hands over a URL, but SwiftUI's ShareLink and others send data, which can
@@ -77,6 +90,21 @@ class ShareViewController: UIViewController {
             return
         }
 
+        // A PDF comes in as itself, ahead of any link to it
+        let providers = extensionItems.flatMap { $0.attachments ?? [] }
+        if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.pdf.identifier) }) {
+            SharedPDF.load(from: provider) { [weak self] data, fileName in
+                DispatchQueue.main.async {
+                    if let data {
+                        self?.showShareUI(.pdf(data, fileName: fileName))
+                    } else {
+                        self?.dismiss()
+                    }
+                }
+            }
+            return
+        }
+
         for item in extensionItems {
             guard let attachments = item.attachments else { continue }
 
@@ -85,7 +113,7 @@ class ShareViewController: UIViewController {
                     SharedURL.load(from: provider) { [weak self] urlString in
                         DispatchQueue.main.async {
                             if let urlString {
-                                self?.showShareUI(urlString: urlString)
+                                self?.showShareUI(.link(urlString))
                             } else {
                                 self?.dismiss()
                             }
@@ -100,7 +128,7 @@ class ShareViewController: UIViewController {
                             if let text = data as? String,
                                let url = URL(string: text),
                                url.scheme == "http" || url.scheme == "https" {
-                                self?.showShareUI(urlString: text)
+                                self?.showShareUI(.link(text))
                             } else {
                                 self?.dismiss()
                             }
@@ -114,9 +142,9 @@ class ShareViewController: UIViewController {
         dismiss()
     }
 
-    private func showShareUI(urlString: String) {
+    private func showShareUI(_ shared: SharedRecipe) {
         let shareView = ShareExtensionView(
-            urlString: urlString,
+            shared: shared,
             onSave: { [weak self] recipe in
                 self?.saveRecipe(recipe)
             },
@@ -178,6 +206,21 @@ class ShareViewController: NSViewController {
             return
         }
 
+        // A PDF comes in as itself, ahead of any link to it
+        let providers = extensionItems.flatMap { $0.attachments ?? [] }
+        if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.pdf.identifier) }) {
+            SharedPDF.load(from: provider) { [weak self] data, fileName in
+                DispatchQueue.main.async {
+                    if let data {
+                        self?.showShareUI(.pdf(data, fileName: fileName))
+                    } else {
+                        self?.dismiss()
+                    }
+                }
+            }
+            return
+        }
+
         for item in extensionItems {
             guard let attachments = item.attachments else { continue }
 
@@ -186,7 +229,7 @@ class ShareViewController: NSViewController {
                     SharedURL.load(from: provider) { [weak self] urlString in
                         DispatchQueue.main.async {
                             if let urlString {
-                                self?.showShareUI(urlString: urlString)
+                                self?.showShareUI(.link(urlString))
                             } else {
                                 self?.dismiss()
                             }
@@ -201,7 +244,7 @@ class ShareViewController: NSViewController {
                             if let text = data as? String,
                                let url = URL(string: text),
                                url.scheme == "http" || url.scheme == "https" {
-                                self?.showShareUI(urlString: text)
+                                self?.showShareUI(.link(text))
                             } else {
                                 self?.dismiss()
                             }
@@ -215,9 +258,9 @@ class ShareViewController: NSViewController {
         dismiss()
     }
 
-    private func showShareUI(urlString: String) {
+    private func showShareUI(_ shared: SharedRecipe) {
         let shareView = ShareExtensionView(
-            urlString: urlString,
+            shared: shared,
             onSave: { [weak self] recipe in
                 self?.saveRecipe(recipe)
             },

@@ -18,6 +18,10 @@ struct WhatsNew {
     /// Every version with something to show. A version without an entry
     /// shows nothing.
     static let releases: [WhatsNew] = [
+        WhatsNew(version: "1.5.2", items: [
+            Item(icon: "doc.text", title: "Recipes from PDFs",
+                 detail: "Add a recipe card, a handout or a saved page from a PDF, from the + menu or the share sheet."),
+        ]),
         WhatsNew(version: "1.5.1", items: [
             Item(icon: "sparkles", title: "A tour of Cookbo",
                  detail: "A quick look at how it all works, with a little help from some produce."),

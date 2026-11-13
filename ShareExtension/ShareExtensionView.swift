@@ -8,8 +8,14 @@ import UIKit
 typealias PlatformImage = UIImage
 #endif
 
+/// What came in through the share sheet: a page to fetch, or a PDF itself.
+enum SharedRecipe {
+    case link(String)
+    case pdf(Data, fileName: String)
+}
+
 struct ShareExtensionView: View {
-    let urlString: String
+    let shared: SharedRecipe
     let onSave: (RecipeParser.ParsedRecipe) -> Void
     let onCancel: () -> Void
 
@@ -71,7 +77,7 @@ struct ShareExtensionView: View {
         VStack(spacing: 16) {
             ProgressView()
                 .controlSize(.large)
-            Text("Fetching recipe...")
+            Text(isPDF ? "Reading PDF..." : "Fetching recipe...")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -112,13 +118,15 @@ struct ShareExtensionView: View {
                 saveButton
 
                 // Source link
-                Text(recipe.sourceURL)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .padding(.horizontal)
-                    .padding(.bottom, 20)
+                if !recipe.sourceURL.isEmpty {
+                    Text(recipe.sourceURL)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .padding(.horizontal)
+                }
+                Spacer().frame(height: 20)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -313,9 +321,20 @@ struct ShareExtensionView: View {
 
     // MARK: - Fetch
 
+    private var isPDF: Bool {
+        if case .pdf = shared { return true }
+        return false
+    }
+
     private func fetchRecipe() async {
         do {
-            let recipe = try await RecipeParser.fetchAndParse(urlString: urlString)
+            let recipe: RecipeParser.ParsedRecipe
+            switch shared {
+            case .link(let urlString):
+                recipe = try await RecipeParser.fetchAndParse(urlString: urlString)
+            case .pdf(let data, let fileName):
+                recipe = try RecipePDFReader.importRecipe(from: data, fileName: fileName)
+            }
             parsedRecipe = recipe
             viewState = .preview
 

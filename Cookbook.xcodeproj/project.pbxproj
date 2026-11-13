@@ -8,6 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		2B720F522F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */; };
+		5DF0A11E00000000000000A2 /* RecipePDFReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DF0A11E00000000000000A1 /* RecipePDFReader.swift */; };
+		5DF0A11E00000000000000A3 /* RecipePDFReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DF0A11E00000000000000A1 /* RecipePDFReader.swift */; };
+		5DF0A11E00000000000000A4 /* RecipePDFReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DF0A11E00000000000000A1 /* RecipePDFReader.swift */; };
+		5DF0A11E00000000000000B2 /* RecipePDFReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DF0A11E00000000000000B1 /* RecipePDFReaderTests.swift */; };
 		2B720F532F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */; };
 		3405513CA6F5C63AB4CC12FD /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA103C360007E0CE64A93FEF /* Category.swift */; };
 		7B2B729AD4980D364B7C0C6E /* InstagramParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC14C824BE658B885EC73CA4 /* InstagramParserTests.swift */; };
@@ -86,6 +90,7 @@
 		0A50B367CE7ACD4D440C64C4 /* Cookbook.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Cookbook.swift; path = Cookbook/Models/Cookbook.swift; sourceTree = SOURCE_ROOT; };
 		2B243B9A2F0B11D400840694 /* Cookbo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cookbo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeParserCore.swift; sourceTree = "<group>"; };
+		5DF0A11E00000000000000A1 /* RecipePDFReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipePDFReader.swift; sourceTree = "<group>"; };
 		543D3101572A923451D77D4D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		5C38762D6DE52788DB169B7C /* CookbookFolders.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CookbookFolders.swift; path = Cookbook/Services/CookbookFolders.swift; sourceTree = SOURCE_ROOT; };
 		99965210B2E197AAC6702F05 /* CookbookTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CookbookTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -96,6 +101,7 @@
 		C00C0DE000000000000000B2 /* CookPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CookPlan.swift; path = Cookbook/Services/CookPlan.swift; sourceTree = SOURCE_ROOT; };
 		C00C0DE000000000000000B3 /* CookIntroTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CookIntroTests.swift; sourceTree = "<group>"; };
 		C00C0DE000000000000000B9 /* RecipeParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipeParserTests.swift; sourceTree = "<group>"; };
+		5DF0A11E00000000000000B1 /* RecipePDFReaderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipePDFReaderTests.swift; sourceTree = "<group>"; };
 		C00C0DE000000000000000B4 /* CookIntro.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CookIntro.swift; path = Cookbook/Services/CookIntro.swift; sourceTree = SOURCE_ROOT; };
 		C0FFEEB111111111110000 /* RecipeCollectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecipeCollectionTests.swift; sourceTree = "<group>"; };
 		C0FFEEB211111111110001 /* WeekPlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WeekPlanTests.swift; sourceTree = "<group>"; };
@@ -231,6 +237,7 @@
 				C00C0DE000000000000000B1 /* CookPlanTests.swift */,
 				C00C0DE000000000000000B3 /* CookIntroTests.swift */,
 				C00C0DE000000000000000B9 /* RecipeParserTests.swift */,
+				5DF0A11E00000000000000B1 /* RecipePDFReaderTests.swift */,
 				E7B5C77427C3F100E839E57B /* CookbookFoldersTests.swift */,
 			);
 			path = CookbookTests;
@@ -268,6 +275,7 @@
 			isa = PBXGroup;
 			children = (
 				2B720F502F4D7DC60069FE07 /* RecipeParserCore.swift */,
+				5DF0A11E00000000000000A1 /* RecipePDFReader.swift */,
 				DD0000000000000000000010 /* CookTimerAlarm.swift */,
 			);
 			path = Shared;
@@ -502,6 +510,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2B720F522F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */,
+				5DF0A11E00000000000000A2 /* RecipePDFReader.swift in Sources */,
 				DD0000000000000000000011 /* CookTimerAlarm.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -511,6 +520,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2B720F532F4D7DC60069FE07 /* RecipeParserCore.swift in Sources */,
+				5DF0A11E00000000000000A3 /* RecipePDFReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -551,6 +561,8 @@
 				F0C11A368A8B4652CD8A31C5 /* Cookbook.swift in Sources */,
 				3405513CA6F5C63AB4CC12FD /* Category.swift in Sources */,
 				F8F63616CBF0C40478ED1536 /* RecipeParserCore.swift in Sources */,
+				5DF0A11E00000000000000A4 /* RecipePDFReader.swift in Sources */,
+				5DF0A11E00000000000000B2 /* RecipePDFReaderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
