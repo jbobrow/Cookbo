@@ -389,6 +389,7 @@ struct RecipeListView: View {
         }
     }
 
+    #if os(iOS)
     /// The list opened up: two columns of recipes, either side of the middle
     /// of the glass.
     private func recipeColumns(edges: ColumnEdges) -> some View {
@@ -443,6 +444,12 @@ struct RecipeListView: View {
         }
         .background(Color(uiColor: .systemGroupedBackground))
     }
+    #else
+    /// Only an iPhone Duo opens up; a Mac keeps the one list.
+    private func recipeColumns(edges: ColumnEdges) -> some View {
+        recipeList
+    }
+    #endif
 
     /// Shown when the cookbook has recipes but this collection or search has none.
     private var emptyCollectionState: some View {
