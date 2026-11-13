@@ -14,6 +14,8 @@ struct RecipeDetailView: View {
     @State private var showingCookedConfirmation = false
     @State private var editingCategory: Category?
     @State private var isCooking = false
+    /// An iPhone Duo opened like a book.
+    @State private var isSpread = false
     @State private var cookingEnteredByRotation = false
     @State private var isVisible = false
     @Environment(\.dismiss) private var dismiss
@@ -21,8 +23,7 @@ struct RecipeDetailView: View {
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
     #endif
     @Environment(\.duoPose) private var duoPose
-    @Environment(\.controlsRailed) private var controlsRailed
-    @Environment(\.controlsTrailing) private var controlsTrailing
+    @Environment(\.cameraStrip) private var cameraStrip
 
     private var accentColor: Color {
         if let categoryID = recipe.categoryID,
@@ -58,22 +59,14 @@ struct RecipeDetailView: View {
                 }
             }
         }
-        // Folded shut and tall, the buttons stand in the camera band, under
-        // the thumb; the back button stays where it is
-        .cameraStripPage {
-            Group {
-                if !recipe.directions.isEmpty {
-                    RailButton(symbol: "play.fill", label: cookButtonTitle) { startCooking(byRotation: false) }
-                }
-                RailButton(symbol: "pencil", label: "Edit") { showingEditSheet = true }
-                RailButton(symbol: "square.and.arrow.up", label: "Share Recipe", action: shareRecipe)
-                RailMenu(symbol: "ellipsis", label: "More") { moreMenuItems }
-            }
-            .tint(accentColor)
-        }
+        .onGeometryChange(for: Bool.self, of: { $0.spine() != nil }) { isSpread = $0 }
+        // Folded shut, the page can run under the camera band
+        .cameraStripPage()
         .navigationTitle("")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        // Opened like a book, the spread has buttons of its own, one to a page
+        .toolbar(isSpread ? .hidden : .automatic, for: .navigationBar)
         #endif
         .toolbar {
             #if os(macOS)
@@ -88,26 +81,47 @@ struct RecipeDetailView: View {
             }
             #endif
             ToolbarItemGroup(placement: .primaryAction) {
-                if !controlsRailed {
+                // Folded shut and tall, the camera band has room to stand the
+                // page's buttons apart. Anywhere else, and wide, where they'd
+                // be over the page, they gather in the menu.
+                if cameraStrip?.rails == true {
+                    if !recipe.directions.isEmpty {
+                        Button(action: { startCooking(byRotation: false) }) {
+                            Image(systemName: "play.fill")
+                        }
+                        .accessibilityLabel(cookButtonTitle)
+                    }
+                    Button(action: { showingEditSheet = true }) {
+                        Image(systemName: "pencil")
+                    }
+                    .accessibilityLabel("Edit")
+                    Button(action: shareRecipe) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel("Share Recipe")
                     Menu {
-                        Button(action: { showingEditSheet = true }) {
-                            Label("Edit", systemImage: "pencil")
-                        }
-
-                        Button(action: shareRecipe) {
-                            Label("Share Recipe", systemImage: "square.and.arrow.up")
-                        }
-
                         moreMenuItems
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel("More")
+                } else {
+                    Menu {
+                        allMenuItems
+                    } label: {
+                        Image(systemName: cameraStrip != nil ? "ellipsis" : "ellipsis.circle")
                     }
                 }
-                // Folded shut and wide, the way back to tall
-                if controlsTrailing {
-                    CameraStripCollapseButton()
+            }
+            #if os(iOS)
+            // The way between tall and wide, at the foot of the band under
+            // the thumb
+            if cameraStrip != nil {
+                ToolbarItem(placement: .bottomBar) {
+                    CameraStripToggleButton()
                 }
             }
+            #endif
         }
         .onAppear {
             store.markViewed(recipe)
@@ -219,6 +233,9 @@ struct RecipeDetailView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
+            // Folded shut, the bar's buttons are in the camera band, so the
+            // picture can run right up to the top of the glass
+            .ignoresSafeArea(.container, edges: cameraStrip != nil ? .top : [])
         }
     }
 
@@ -243,6 +260,21 @@ struct RecipeDetailView: View {
                 }
             }
             .frame(width: spine.minX)
+            // The picture runs right up to the top of the glass
+            .ignoresSafeArea(.container, edges: .top)
+            .overlay(alignment: .topLeading) {
+                RailButton(symbol: "chevron.left", label: "Back") { dismiss() }
+                    .padding(.duoCorner)
+            }
+            // With the navigation bar hidden the system's swipe back goes too
+            .overlay(alignment: .leading) {
+                Color.clear
+                    .frame(width: 16)
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 20).onEnded { drag in
+                        if drag.translation.width > 60 { dismiss() }
+                    })
+            }
 
             Color.clear
                 .frame(width: spine.width)
@@ -255,12 +287,29 @@ struct RecipeDetailView: View {
                         notesSection
                         markCookedButton(scrollProxy: proxy)
                     }
-                    .padding(.vertical)
+                    // Past the height of the page's menu, beside the heading
+                    .padding(.top, 35)
+                    .padding(.bottom)
                     .padding(.horizontal, 28)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .frame(maxWidth: .infinity)
+            .overlay(alignment: .topTrailing) {
+                Menu {
+                    allMenuItems
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 48, height: 48)
+                        .contentShape(Circle())
+                        .duoGlass()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("More")
+                .padding(.duoCorner)
+            }
         }
     }
 
@@ -593,6 +642,19 @@ struct RecipeDetailView: View {
     /// This Week, the category and Delete: the rest of the recipe's menu,
     /// after Edit and Share.
     @ViewBuilder
+    private var allMenuItems: some View {
+        Button(action: { showingEditSheet = true }) {
+            Label("Edit", systemImage: "pencil")
+        }
+
+        Button(action: shareRecipe) {
+            Label("Share Recipe", systemImage: "square.and.arrow.up")
+        }
+
+        moreMenuItems
+    }
+
+    @ViewBuilder
     private var moreMenuItems: some View {
         Button(action: toggleThisWeek) {
             if recipe.isInThisWeek {
@@ -685,9 +747,11 @@ struct RecipeDetailView: View {
         cookStartStep = step
         cookingEnteredByRotation = byRotation
         // Turning the phone opens cook mode at once rather than sliding it up
-        // while the screen is still upright; it then turns sideways
+        // while the screen is still upright; it then turns sideways. So does an
+        // iPhone Duo, whose status bar is hidden: the system's slide would show
+        // it for a moment, whatever the page says.
         var transaction = Transaction()
-        transaction.disablesAnimations = byRotation
+        transaction.disablesAnimations = byRotation || duoPose != .none
         withTransaction(transaction) { isCooking = true }
     }
 

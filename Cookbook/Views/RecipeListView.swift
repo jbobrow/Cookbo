@@ -1,6 +1,21 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+#if os(iOS)
+private extension View {
+    /// With room to spare the system leaves the search field out over the
+    /// page; this keeps it a button until it's asked for.
+    @ViewBuilder
+    func searchWaitsAsAButton(_ waits: Bool) -> some View {
+        if #available(iOS 26.0, *) {
+            searchToolbarBehavior(waits ? .minimize : .automatic)
+        } else {
+            self
+        }
+    }
+}
+#endif
+
 struct RecipeListView: View {
     @State private var cookLink: CookLinkTarget?
     @EnvironmentObject var store: RecipeStore
@@ -33,8 +48,9 @@ struct RecipeListView: View {
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
     #endif
     @Environment(\.duoPose) private var duoPose
-    @Environment(\.controlsRailed) private var controlsRailed
-    @Environment(\.controlsTrailing) private var controlsTrailing
+    @Environment(\.cameraStrip) private var cameraStrip
+    /// An iPhone Duo opened like a book: the crease, in the page's space.
+    @State private var columnEdges: ColumnEdges?
 
     // Check if device is iPad or Mac (grid view enabled), or an iPhone Duo
     // opened to its inner screen, which is as roomy as a small iPad
@@ -248,11 +264,29 @@ struct RecipeListView: View {
         // its recipes scroll by; the rows draw their own rounded cards, and
         // sit inside the card margins so a swipe starts at the card's edge
         .listStyle(.plain)
-        .contentMargins(.top, 0, for: .scrollContent)
+        .contentMargins(.top, 12, for: .scrollContent)
         .contentMargins(.horizontal, ListCard.margin, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .background(Color(uiColor: .systemGroupedBackground))
         #endif
+    }
+
+    @ViewBuilder
+    private func cardMenuItems(for recipe: Recipe) -> some View {
+        categoryMenuItems(for: recipe)
+        Divider()
+        thisWeekButton(for: recipe)
+        Button(action: { shareRecipe(recipe) }) {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+        Divider()
+        Button(role: .destructive, action: {
+            if let index = filteredRecipes.firstIndex(where: { $0.id == recipe.id }) {
+                deleteRecipes(at: IndexSet([index]))
+            }
+        }) {
+            Label("Delete", systemImage: "trash")
+        }
     }
 
     private var recipeGrid: some View {
@@ -260,29 +294,14 @@ struct RecipeListView: View {
             LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
                 ForEach(Array(groupedRecipes.enumerated()), id: \.offset) { groupIndex, group in
                     Section {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200, maximum: 250), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
+                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
                             ForEach(isCollapsed(group.category) && isGrouped ? [] : group.recipes) { recipe in
                                 NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
                                     RecipeCardView(recipe: recipe, showCategory: false)
                                 }
                                 .buttonStyle(.plain)
                                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                                .contextMenu {
-                                    categoryMenuItems(for: recipe)
-                                    Divider()
-                                    thisWeekButton(for: recipe)
-                                    Button(action: { shareRecipe(recipe) }) {
-                                        Label("Share", systemImage: "square.and.arrow.up")
-                                    }
-                                    Divider()
-                                    Button(role: .destructive, action: {
-                                        if let index = filteredRecipes.firstIndex(where: { $0.id == recipe.id }) {
-                                            deleteRecipes(at: IndexSet([index]))
-                                        }
-                                    }) {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
+                                .contextMenu { cardMenuItems(for: recipe) }
                             }
                         }
                         .padding(.horizontal, 20)
@@ -307,24 +326,121 @@ struct RecipeListView: View {
         }
     }
 
+    /// As many as fit, sharing out all the width so none is left over beside
+    /// them, or on an iPhone Duo opened up, two either side of the middle of
+    /// the glass. The grid sits 20pt in.
+    private var gridColumns: [GridItem] {
+        guard let columnEdges else {
+            return [GridItem(.adaptive(minimum: 196), spacing: 16, alignment: .top)]
+        }
+        let leftCard = max((columnEdges.left - 20 - 16) / 2, 0)
+        return [
+            GridItem(.fixed(leftCard), spacing: 16, alignment: .top),
+            GridItem(.fixed(leftCard), spacing: columnEdges.gap, alignment: .top),
+            GridItem(.flexible(), spacing: 16, alignment: .top),
+            GridItem(.flexible(), alignment: .top)
+        ]
+    }
+
     private var currentView: some View {
         Group {
             if store.recipes.isEmpty {
                 emptyState
             } else {
                 VStack(spacing: 0) {
-                    justViewedRow
-                    collectionBar
+                    if let columnEdges {
+                        // Opened up: what you just saw over the left-hand column
+                        // and the filters over the right, side by side, so the
+                        // recipes get the height. Each brings 20pt of margin of
+                        // its own to the gap between them.
+                        HStack(spacing: columnEdges.gap - 40) {
+                            // Nothing sits under it here, so it keeps its own
+                            // margin from the page below
+                            justViewedRow
+                                .padding(.horizontal, 4)
+                                .padding(.bottom, 8)
+                                .frame(width: columnEdges.left + 20, alignment: .leading)
+                            collectionBar
+                                .padding(.leading, 4)
+                        }
+                    } else {
+                        justViewedRow
+                            .clearOfCameraStrip(cameraStrip)
+                        collectionBar
+                            .clearOfCameraStrip(cameraStrip)
+                    }
                     if filteredRecipes.isEmpty {
                         emptyCollectionState
                     } else if isGridCapable && viewMode == .grid {
                         recipeGrid
+                    } else if let columnEdges {
+                        recipeColumns(edges: columnEdges)
                     } else {
                         recipeList
                     }
                 }
             }
         }
+        .onGeometryChange(for: ColumnEdges?.self, of: \.columnEdges) { edges in
+            // Bending the glass or laying it flat slides the columns; anything
+            // else is a different layout altogether
+            withAnimation(columnEdges != nil && edges != nil ? .snappy : nil) { columnEdges = edges }
+        }
+    }
+
+    /// The list opened up: two columns of recipes, either side of the middle
+    /// of the glass.
+    private func recipeColumns(edges: ColumnEdges) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12, pinnedViews: [.sectionHeaders]) {
+                ForEach(Array(groupedRecipes.enumerated()), id: \.offset) { _, group in
+                    Section {
+                        LazyVGrid(columns: [
+                            GridItem(.fixed(max(edges.left - 20, 0)), spacing: edges.gap, alignment: .top),
+                            GridItem(.flexible(), alignment: .top)
+                        ], alignment: .leading, spacing: 12) {
+                            ForEach(isCollapsed(group.category) && isGrouped ? [] : group.recipes) { recipe in
+                                NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
+                                    HStack(spacing: 8) {
+                                        RecipeRowView(recipe: recipe, showCategory: false)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        Image(systemName: "chevron.right")
+                                            .font(.footnote.weight(.semibold))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 11)
+                                    .frame(maxHeight: .infinity)
+                                    .background(
+                                        Color(uiColor: .secondarySystemGroupedBackground),
+                                        in: RoundedRectangle(cornerRadius: ListCard.radius, style: .continuous)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu { cardMenuItems(for: recipe) }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                    } header: {
+                        if isGrouped, group.category != nil || !store.categories.isEmpty {
+                            CategorySectionHeader(
+                                category: group.category,
+                                count: group.recipes.count,
+                                isCollapsed: isCollapsed(group.category)
+                            ) {
+                                toggleCollapsed(group.category)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(uiColor: .systemGroupedBackground))
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 12)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     /// Shown when the cookbook has recipes but this collection or search has none.
@@ -386,7 +502,9 @@ struct RecipeListView: View {
     #if os(iOS)
     private var iOSContent: some View {
         Group {
-            if isGridCapable {
+            // An iPad brings search up from its toolbar button; everywhere
+            // else it stays in place, so opening it doesn't rebuild the page
+            if isGridCapable && duoPose != .open {
                 if isSearching {
                     currentView
                         .searchable(text: $searchText, isPresented: $isSearching, prompt: "Search recipes")
@@ -398,12 +516,93 @@ struct RecipeListView: View {
                         .navigationBarTitleDisplayMode(.inline)
                 }
             } else {
-                currentView
+                withDuoHeader(currentView)
                     .searchable(text: $searchText, prompt: "Search recipes")
+                    .searchWaitsAsAButton(duoPose == .open)
                     .navigationTitle(store.cookbook.name)
                     .navigationBarTitleDisplayMode(.inline)
+                    .toolbar(duoPose == .none ? .automatic : .hidden, for: .navigationBar)
             }
         }
+    }
+    #endif
+
+    #if os(iOS)
+    /// The system stands a Duo's bar buttons down a column at the right, and
+    /// opened out puts the title on the crease, so the page has its own row.
+    @ViewBuilder
+    private func withDuoHeader(_ content: some View) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .safeAreaBar(edge: .top, spacing: 0) {
+                    if duoPose != .none { duoHeader }
+                }
+                // Folded shut, tall or wide, Add stands in the band below the camera
+                .overlay(alignment: .topTrailing) {
+                    if let cameraStrip {
+                        glassAddButton
+                            .frame(width: cameraStrip.width)
+                            .padding(.top, cameraStrip.occluded.maxY + 12)
+                            .offset(x: (cameraStrip.rails ? cameraStrip.width : 0) + cameraStrip.lensOffset)
+                    }
+                }
+        } else {
+            content
+        }
+    }
+
+    private var duoHeader: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 12) {
+                RailButton(symbol: "books.vertical", label: "Cookbooks") {
+                    showingCookbookSwitcher = true
+                }
+                cookbookTitle
+                    .buttonStyle(.plain)
+                    .lineLimit(1)
+            }
+            // A long name stops at the middle of the glass
+            .frame(maxWidth: columnEdges.map { $0.left + 20 - .duoCorner }, alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            if isGridCapable {
+                Picker("View Mode", selection: $viewMode) {
+                    ForEach(RecipeViewMode.allCases) { mode in
+                        Image(systemName: mode.icon)
+                            .tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: CGFloat(RecipeViewMode.allCases.count * 48))
+            }
+
+            if cameraStrip == nil {
+                glassAddButton
+            }
+        }
+        // Shut, the corners on this side are nearly square, so the row keeps
+        // to the page's margin, with the camera beside it
+        .padding(.horizontal, duoPose == .open ? .duoCorner : 16)
+        .clearOfCameraStrip(cameraStrip)
+        .padding(.top, duoPose == .open ? .duoCorner : cameraStrip.map { $0.lensMidY - 24 } ?? 8)
+        .padding(.bottom, 8)
+    }
+
+    /// Add, for a place where the system doesn't give it glass of its own.
+    private var glassAddButton: some View {
+        Menu {
+            addMenuItems
+        } label: {
+            Image(systemName: "plus")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 48, height: 48)
+                .contentShape(Circle())
+                .duoGlass()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add Recipe")
     }
     #endif
 
@@ -419,12 +618,8 @@ struct RecipeListView: View {
         NavigationStack {
             if store.isICloudAvailable || store.useLocalStorage {
                 mainContent
-                    // Folded shut and tall, the buttons stand in the camera
-                    // band, under the thumb
-                    .cameraStripPage {
-                        RailButton(symbol: "books.vertical", label: "Cookbooks") { showingCookbookSwitcher = true }
-                        RailMenu(symbol: "plus", label: "Add Recipe") { addMenuItems }
-                    }
+                    // Folded shut, the page can run under the camera band
+                    .cameraStripPage()
                     .navigationDestination(item: $cookLink) { target in
                         RecipeDetailView(recipe: target.recipe, cookAtStep: target.step)
                     }
@@ -562,8 +757,7 @@ struct RecipeListView: View {
             .help("Switch between grid and list view")
         }
         #else
-        // Folded shut, it's in the camera band or at the trailing end instead
-        if !controlsRailed && !controlsTrailing {
+        if duoPose == .none {
             ToolbarItem(placement: .topBarLeading) {
                 cookbooksButton
             }
@@ -571,22 +765,13 @@ struct RecipeListView: View {
         #endif
 
         #if os(iOS)
-        ToolbarItem(placement: .principal) {
-            Button(action: { showingSettings = true }) {
-                Text(store.cookbook.name)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-            }
-            .popover(isPresented: $showingSettings) {
-                SettingsView()
-                    .presentationCompactAdaptation(.popover)
-                    .frame(width: 350)
-            }
+        if duoPose == .none {
+            ToolbarItem(placement: .principal) { cookbookTitle }
         }
         #endif
 
         #if os(iOS)
-        if isGridCapable && !isSearching {
+        if isGridCapable && duoPose != .open && !isSearching {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack (spacing: 12) {
                     Menu {
@@ -621,7 +806,7 @@ struct RecipeListView: View {
             }
         }
 
-        if !isGridCapable && !controlsRailed && !controlsTrailing {
+        if !isGridCapable && duoPose == .none {
             ToolbarItem(placement: .automatic) {
                 Menu {
                     addMenuItems
@@ -631,17 +816,24 @@ struct RecipeListView: View {
             }
         }
 
-        // Folded shut and wide: every button at the right-hand end, where
-        // the thumb holding the phone already is
-        if controlsTrailing {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Menu {
-                    addMenuItems
-                } label: {
-                    Image(systemName: "plus")
-                }
-                cookbooksButton
-                CameraStripCollapseButton()
+        // On a Duo, the page's own row has the rest. Opened out, search waits
+        // in the corner, under the thumb
+        if duoPose == .open, #available(iOS 26.0, *) {
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+        }
+
+        // Folded shut, the system stands these at the foot of the camera band:
+        // the way between tall and wide, clear of the rows and under the thumb
+        if cameraStrip != nil {
+            ToolbarItem(placement: .bottomBar) {
+                CameraStripToggleButton()
+            }
+            // A button of our own in the bottom bar takes search's place
+            // there unless search is asked for too
+            if #available(iOS 26.0, *) {
+                ToolbarSpacer(.fixed, placement: .bottomBar)
+                DefaultToolbarItem(kind: .search, placement: .bottomBar)
             }
         }
         #else
@@ -658,6 +850,19 @@ struct RecipeListView: View {
             }
         }
         #endif
+    }
+
+    private var cookbookTitle: some View {
+        Button(action: { showingSettings = true }) {
+            Text(store.cookbook.name)
+                .font(.title2)
+                .fontWeight(.semibold)
+        }
+        .popover(isPresented: $showingSettings) {
+            SettingsView()
+                .presentationCompactAdaptation(.popover)
+                .frame(width: 350)
+        }
     }
 
     private var cookbooksButton: some View {
@@ -1277,6 +1482,27 @@ struct CategorySectionHeader: View {
         .buttonStyle(.plain)
         .accessibilityLabel(category?.name ?? "Uncategorized")
         .accessibilityHint(isCollapsed ? "Expand section" : "Collapse section")
+    }
+}
+
+/// Where a list or grid's two sides meet on an iPhone Duo opened up. Held like
+/// a book, each keeps 20pt clear of the crease. Opened flat there's nothing to
+/// keep clear of, and they're as close as any other two columns.
+private nonisolated struct ColumnEdges: Equatable {
+    /// Where the left side ends.
+    var left: CGFloat
+    /// Where the right side starts.
+    var right: CGFloat
+
+    var gap: CGFloat { right - left }
+}
+
+private extension GeometryProxy {
+    var columnEdges: ColumnEdges? {
+        guard let spine = spine() else { return nil }
+        return fold == nil
+            ? ColumnEdges(left: spine.midX - 8, right: spine.midX + 8)
+            : ColumnEdges(left: spine.minX - 20, right: spine.maxX + 20)
     }
 }
 

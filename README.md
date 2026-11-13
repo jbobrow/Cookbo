@@ -45,12 +45,14 @@ A clean, minimalist SwiftUI app for iOS, iPadOS, and macOS that manages multiple
 - **Recipe Rows**: Compact list view with thumbnails and key info
 - **Minimalist Design**: Clean, uncluttered interface
 - **iPad Optimized**: Touch-friendly spacing, popovers, and context menus
-- **iPhone Duo**: Folded shut, each screen is tall, with its buttons in a rail down the
-  camera band under your thumb, or wide, running the full width with the buttons at the
-  right-hand end of the bar; the rail's foot and the bar switch between them, and the
-  choice is kept. Opened up, the cookbook is a grid and the screen turns freely; held
-  like a book, a recipe is a two-page spread (ingredients left, directions right) and
-  cook mode puts the step on the right-hand page; stood up like a laptop, cook mode
+- **iPhone Duo**: Folded shut, the clock and signal hide and the buttons stand in glass
+  down the camera band under your thumb, while each screen is tall, beside them, or wide,
+  running the full width under them; a button in the band switches between the two, and
+  the choice is kept. Opened up, the clock and signal stay hidden, the cookbook is a grid and the screen
+  turns freely, and cook mode's buttons sit in the bottom corner, its page label top right, and its prep page shows measuring on the left and cutting on the right, both open; held like a book, the list
+  is a column to a page, a recipe is a two-page spread (ingredients left, directions right),
+  and cook mode puts the step on the right-hand page; opened flat, the list and grid close
+  up the gap at the crease and the step takes two thirds of the screen; stood up like a laptop, cook mode
   shows the step on the upright half and the buttons on the half on the counter.
   Needs Xcode with the iOS 27.1 SDK; older Xcodes build the app without it
 - **Cross-Platform**: Works seamlessly on iOS, iPadOS, and macOS
