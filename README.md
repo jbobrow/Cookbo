@@ -61,6 +61,7 @@ A clean, minimalist SwiftUI app for iOS, iPadOS, and macOS that manages multiple
 
 ### Import/Export
 - **Import Recipes**: Add recipes from `.cookbook.json` files
+- **Import from PDF**: Read a recipe card, handout or saved page from a PDF, through Add from PDF or the share sheet
 - **Import Cookbooks**: Import entire cookbooks with all recipes and categories
 - **Export Recipes**: Share individual recipes as files
 - **Export Cookbooks**: Share complete cookbooks with metadata

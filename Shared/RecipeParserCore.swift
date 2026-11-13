@@ -458,8 +458,8 @@ struct RecipeParserCore {
                 return text
             }
         }
-        // Strip textual step number prefix
-        if let regex = try? NSRegularExpression(pattern: #"^(?:step\s*)?\d+[\.\)\:\-]\s*"#, options: .caseInsensitive) {
+        // Strip textual step number prefix, but not the start of "3-4 sliders" or "1.5 cups"
+        if let regex = try? NSRegularExpression(pattern: #"^(?:step\s*)?\d+[\.\)\:\-](?!\d)\s*"#, options: .caseInsensitive) {
             let range = NSRange(text.startIndex..., in: text)
             text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
         }
@@ -594,9 +594,7 @@ struct RecipeParserCore {
                     noteLines.append(yield)
                 }
                 currentSection = .ingredients
-                let cleaned = stripLeadingBullets(rest)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "-–•*▪️✅☑️🟢▫️◾◽"))
-                    .trimmingCharacters(in: .whitespaces)
+                let cleaned = trimmingIngredientBullets(stripLeadingBullets(rest))
                 if !cleaned.isEmpty { currentGroupItems.append(cleaned) }
                 continue
             }
@@ -691,14 +689,18 @@ struct RecipeParserCore {
                 if keyword.range(of: leadIn, options: .regularExpression) != nil { continue }
                 preambleLines.append(stripped)
             case .ingredients:
-                let cleaned = stripLeadingBullets(stripped)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "-–•*▪️✅☑️🟢▫️◾◽"))
-                    .trimmingCharacters(in: .whitespaces)
+                let cleaned = trimmingIngredientBullets(stripLeadingBullets(stripped))
                 if !cleaned.isEmpty {
                     currentGroupItems.append(cleaned)
                 }
             case .directions:
                 if isHashtagLine(stripped) { continue }
+                // "*grapeseed oil works too" after the steps footnotes an ingredient
+                if !directionLines.isEmpty, stripped.range(of: #"^\*+[^\s*]"#, options: .regularExpression) != nil {
+                    noteLines.append(stripped)
+                    currentSection = .notes
+                    continue
+                }
                 let cleaned = stripDirectionPrefix(stripped)
                 if !cleaned.isEmpty {
                     directionLines.append(cleaned)
@@ -750,6 +752,22 @@ struct RecipeParserCore {
         result.cookDuration = cookDuration
 
         return result
+    }
+
+    private static let ingredientBullets = CharacterSet(charactersIn: "-–•*▪️✅☑️🟢▫️◾◽")
+
+    /// Bullets and dashes off both ends of an ingredient, except a trailing
+    /// "*" or "**", which points at a footnote below the recipe.
+    private static func trimmingIngredientBullets(_ text: String) -> String {
+        var text = text
+        let trailing = ingredientBullets.subtracting(CharacterSet(charactersIn: "*"))
+        while let first = text.unicodeScalars.first, ingredientBullets.contains(first) {
+            text.unicodeScalars.removeFirst()
+        }
+        while let last = text.unicodeScalars.last, trailing.contains(last) {
+            text.unicodeScalars.removeLast()
+        }
+        return text.trimmingCharacters(in: .whitespaces)
     }
 
     /// Flush the current ingredient group into the groups array.

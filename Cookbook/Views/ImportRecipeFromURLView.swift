@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #else
@@ -61,9 +62,14 @@ struct ImportRecipeFromURLView: View {
     @State private var errorMessage: String?
     @State private var parsedRecipe: RecipeURLImporter.ParsedRecipe?
     @State private var previewImageData: Data?
+    @State private var showingPDFPicker = false
+    @Binding private var choosingPDF: Bool
 
-    init(initialURL: String = "") {
+    /// `choosingPDF` opens the file picker straight away, for Add from PDF.
+    /// It's a binding so the sheet sees it set in the same tap that opens it.
+    init(initialURL: String = "", choosingPDF: Binding<Bool> = .constant(false)) {
         _urlString = State(initialValue: initialURL)
+        _choosingPDF = choosingPDF
     }
 
     var body: some View {
@@ -73,6 +79,7 @@ struct ImportRecipeFromURLView: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         urlInputSection
+                        pdfSection
                         if let error = errorMessage {
                             errorSection(error)
                         }
@@ -89,6 +96,7 @@ struct ImportRecipeFromURLView: View {
                 #else
                 Form {
                     urlInputSection
+                    pdfSection
                     if let error = errorMessage {
                         errorSection(error)
                     }
@@ -101,7 +109,7 @@ struct ImportRecipeFromURLView: View {
                 }
                 #endif
             }
-            .navigationTitle("Import from URL")
+            .navigationTitle("Import Recipe")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -119,6 +127,16 @@ struct ImportRecipeFromURLView: View {
                 if !urlString.isEmpty && parsedRecipe == nil {
                     fetchRecipe()
                 }
+            }
+            .task {
+                // A picker asked for while this sheet is still rising never shows
+                guard choosingPDF, urlString.isEmpty, parsedRecipe == nil else { return }
+                try? await Task.sleep(for: .milliseconds(450))
+                choosingPDF = false
+                showingPDFPicker = true
+            }
+            .fileImporter(isPresented: $showingPDFPicker, allowedContentTypes: [.pdf]) { result in
+                importPDF(result)
             }
         }
     }
@@ -148,6 +166,34 @@ struct ImportRecipeFromURLView: View {
             Text("Paste a URL from a recipe website to automatically import the ingredients and steps.")
         }
         #endif
+    }
+
+    private var pdfSection: some View {
+        #if os(macOS)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("PDF")
+                .font(.headline)
+            Text("A recipe card, a handout, or a page saved as a PDF.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            pdfButton
+        }
+        #else
+        Section {
+            pdfButton
+        } header: {
+            Text("PDF")
+        } footer: {
+            Text("A recipe card, a handout, or a page saved as a PDF.")
+        }
+        #endif
+    }
+
+    private var pdfButton: some View {
+        Button(action: { showingPDFPicker = true }) {
+            Label("Choose a PDF", systemImage: "doc.text")
+        }
+        .disabled(isLoading)
     }
 
     private var fetchButton: some View {
@@ -352,6 +398,21 @@ struct ImportRecipeFromURLView: View {
                 errorMessage = error.localizedDescription
                 isLoading = false
             }
+        }
+    }
+
+    private func importPDF(_ result: Result<URL, Error>) {
+        errorMessage = nil
+        parsedRecipe = nil
+        previewImageData = nil
+        do {
+            let url = try result.get()
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            let data = try Data(contentsOf: url)
+            parsedRecipe = try RecipePDFReader.importRecipe(from: data, fileName: url.lastPathComponent)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
