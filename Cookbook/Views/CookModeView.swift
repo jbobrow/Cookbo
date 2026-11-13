@@ -379,21 +379,16 @@ struct CookModeView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .alert("Stop this timer?", isPresented: Binding(
-            get: { timerToStop != nil },
-            set: { if !$0 { timerToStop = nil } }
-        ), presenting: timerToStop) { timer in
-            Button("Stop Timer", role: .destructive) { timerStore.stop(timer) }
-            Button("Keep Running", role: .cancel) { }
-        } message: { timer in
-            Text("Step \(timer.step + 1) · \(timer.label)")
-        }
     }
+
+    /// How far a step's text may shrink to fit, largest first.
+    private static let fitScales: [CGFloat] = [1, 0.93, 0.86, 0.8, 0.74, 0.68, 0.62, 0.56, 0.5]
 
     /// The step's text, replaced with a slide when the step changes and
     /// moving with a swipe. The slide happens inside a clipped box, so in
     /// landscape the incoming text is cut off at the rule instead of passing
-    /// over the ingredients. In landscape a long step scrolls.
+    /// over the ingredients. In landscape a long step scrolls; in portrait it
+    /// takes the largest size that fits the room the ingredients leave.
     private func slidingStepText(size: CGFloat, scrolls: Bool) -> some View {
         ZStack(alignment: .topLeading) {
             Group {
@@ -401,7 +396,11 @@ struct CookModeView: View {
                     ScrollView(.vertical) { stepText(size: size) }
                         .scrollBounceBehavior(.basedOnSize)
                 } else {
-                    stepText(size: size)
+                    // minimumScaleFactor on wrapped text drops straight to its
+                    // floor rather than to the size that would just fit
+                    ViewThatFits(in: .vertical) {
+                        ForEach(Self.fitScales, id: \.self) { stepText(size: size * $0) }
+                    }
                 }
             }
                 .id(stepIndex)
@@ -413,6 +412,15 @@ struct CookModeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
+        .alert("Stop this timer?", isPresented: Binding(
+            get: { timerToStop != nil },
+            set: { if !$0 { timerToStop = nil } }
+        ), presenting: timerToStop) { timer in
+            Button("Stop Timer", role: .destructive) { timerStore.stop(timer) }
+            Button("Keep Running", role: .cancel) { }
+        } message: { timer in
+            Text("Step \(timer.step + 1) · \(timer.label)")
+        }
     }
 
     /// Timers are the system's, so they use the system's blue rather than
@@ -435,7 +443,6 @@ struct CookModeView: View {
         }
         .font(.system(size: size, weight: .medium))
         .lineSpacing(size * 0.08)
-        .minimumScaleFactor(0.5)
         .accessibilityAddTraits(.isHeader)
     }
 
