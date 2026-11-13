@@ -24,7 +24,8 @@ struct RecipeListView: View {
     @State private var showingImportSheet = false
     @State private var showingImportCookbookSheet = false
     @State private var showingURLImport = false
-    @State private var importChoosesPDF = false
+    @State private var showingPDFPicker = false
+    @State private var pdfToImport: URL?
     @State private var showingSettings = false
     @State private var showingCookbookSwitcher = false
     @State private var importAlert: ImportAlert?
@@ -639,6 +640,7 @@ struct RecipeListView: View {
                             .keyboardShortcut("n", modifiers: .command)
                             .hidden()
                     )
+                    .background { pdfPicker }
             } else {
                 ICloudSetupView()
             }
@@ -647,10 +649,10 @@ struct RecipeListView: View {
             RecipeEditView(recipe: Recipe())
         }
         .sheet(isPresented: $showingURLImport) {
-            ImportRecipeFromURLView(initialURL: store.pendingImportURL ?? "", choosingPDF: $importChoosesPDF)
+            ImportRecipeFromURLView(initialURL: store.pendingImportURL ?? "", initialPDF: pdfToImport)
                 .onDisappear {
                     store.pendingImportURL = nil
-                    importChoosesPDF = false
+                    pdfToImport = nil
                 }
         }
         .onChange(of: store.pendingCookStep) { _, _ in openPendingCookLink() }
@@ -790,7 +792,7 @@ struct RecipeListView: View {
                         Button(action: { showingURLImport = true }) {
                             Label("Add from URL", systemImage: "square.and.arrow.down")
                         }
-                        Button(action: { importChoosesPDF = true; showingURLImport = true }) {
+                        Button(action: { showingPDFPicker = true }) {
                             Label("Add from PDF", systemImage: "doc.text")
                         }
                     } label: {
@@ -857,7 +859,7 @@ struct RecipeListView: View {
                 Button(action: { showingURLImport = true }) {
                     Label("Add from URL", systemImage: "square.and.arrow.down")
                 }
-                Button(action: { importChoosesPDF = true; showingURLImport = true }) {
+                Button(action: { showingPDFPicker = true }) {
                     Label("Add from PDF", systemImage: "doc.text")
                 }
             } label: {
@@ -887,6 +889,17 @@ struct RecipeListView: View {
         .accessibilityLabel("Cookbooks")
     }
 
+    /// Add from PDF picks the file first, then opens the import with it. On
+    /// a view of its own, since a view keeps only one file importer working.
+    private var pdfPicker: some View {
+        Color.clear
+            .fileImporter(isPresented: $showingPDFPicker, allowedContentTypes: [.pdf]) { result in
+                guard case .success(let url) = result else { return }
+                pdfToImport = url
+                showingURLImport = true
+            }
+    }
+
     @ViewBuilder
     private var addMenuItems: some View {
         Button(action: { showingAddRecipe = true }) {
@@ -895,7 +908,7 @@ struct RecipeListView: View {
         Button(action: { showingURLImport = true }) {
             Label("Add from URL", systemImage: "square.and.arrow.down")
         }
-        Button(action: { importChoosesPDF = true; showingURLImport = true }) {
+        Button(action: { showingPDFPicker = true }) {
             Label("Add from PDF", systemImage: "doc.text")
         }
     }
