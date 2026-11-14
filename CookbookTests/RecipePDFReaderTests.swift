@@ -63,6 +63,23 @@ final class RecipePDFReaderTests: XCTestCase {
         XCTAssertEqual(recipe.notes, "Makes 8 scones\n*sharp cheddar works best.")
     }
 
+    /// A browser prints a numbered list with the number and the first line
+    /// in one run, and the lines that wrap starting under the words.
+    func testWrappedStepsUnderTheirWordsRejoin() throws {
+        let printed = [
+            text("Directions:", x: 78, y: 400),
+            text("1. Season the chicken and brown it in the oil for 4 minutes per side over", x: 87, y: 373, width: 431),
+            text("medium-high heat, then move it to a plate.", x: 98, y: 356, width: 230),
+            text("2. Simmer the orzo in the broth for 12 minutes.", x: 85, y: 334, width: 260),
+        ]
+        let recipe = try read([[text("Lemon Orzo", x: 78, y: 700, height: 19), text("Ingredients:", x: 78, y: 660),
+                                text("1 cup orzo", x: 78, y: 640)] + printed])
+        XCTAssertEqual(recipe.directions, [
+            "Season the chicken and brown it in the oil for 4 minutes per side over medium-high heat, then move it to a plate.",
+            "Simmer the orzo in the broth for 12 minutes.",
+        ])
+    }
+
     func testTwoColumnsReadLeftThenRight() throws {
         let card = [
             text("Cheddar Scones", x: 40, y: 700, height: 19),
