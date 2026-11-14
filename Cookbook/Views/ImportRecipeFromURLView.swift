@@ -73,41 +73,26 @@ struct ImportRecipeFromURLView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                #if os(macOS)
-                ScrollView {
-                    VStack(spacing: 20) {
-                        urlInputSection
-                        pdfSection
-                        if let error = errorMessage {
-                            errorSection(error)
-                        }
-                        if let parsed = parsedRecipe {
-                            previewSection(parsed)
-                            ingredientsPreview(parsed)
-                            directionsPreview(parsed)
-                            saveSection
-                        }
-                    }
-                    .padding()
-                    .frame(minWidth: 500, maxWidth: 700)
+            Form {
+                urlInputSection
+                pdfSection
+                if let error = errorMessage {
+                    errorSection(error)
                 }
-                #else
-                Form {
-                    urlInputSection
-                    pdfSection
-                    if let error = errorMessage {
-                        errorSection(error)
-                    }
-                    if let parsed = parsedRecipe {
-                        previewSection(parsed)
-                        ingredientsPreview(parsed)
-                        directionsPreview(parsed)
-                        saveSection
-                    }
+                if let parsed = parsedRecipe {
+                    previewSection(parsed)
+                    ingredientsPreview(parsed)
+                    directionsPreview(parsed)
+                    #if os(iOS)
+                    saveSection
+                    #endif
                 }
-                #endif
             }
+            #if os(macOS)
+            // The Mac draws the same sections as grouped boxes, as Settings does
+            .formStyle(.grouped)
+            .frame(minWidth: 520, idealWidth: 560, minHeight: 380, idealHeight: 520)
+            #endif
             .navigationTitle("Import Recipe")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -121,6 +106,13 @@ struct ImportRecipeFromURLView: View {
                         dismiss()
                     }
                 }
+                #if os(macOS)
+                // A Mac sheet keeps its confirm button beside Cancel, not below the fold
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save Recipe", action: saveRecipe)
+                        .disabled(parsedRecipe == nil)
+                }
+                #endif
             }
             .onAppear {
                 if !urlString.isEmpty && parsedRecipe == nil {
@@ -138,41 +130,23 @@ struct ImportRecipeFromURLView: View {
     // MARK: - Sections
 
     private var urlInputSection: some View {
-        #if os(macOS)
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Recipe URL")
-                .font(.headline)
-            TextField("", text: $urlString, prompt: Text("https://example.com/recipe").foregroundStyle(.placeholder))
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(fetchRecipe)
-            Text("Paste a URL from a recipe website to automatically import the ingredients and steps.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            fetchButton
-        }
-        #else
         Section {
+            #if os(macOS)
+            TextField("Recipe URL", text: $urlString, prompt: Text("https://example.com/recipe"))
+                .labelsHidden()
+                .onSubmit(fetchRecipe)
+            #else
             URLTextField(text: $urlString, onSubmit: fetchRecipe)
+            #endif
             fetchButton
         } header: {
             Text("Recipe URL")
         } footer: {
             Text("Paste a URL from a recipe website to automatically import the ingredients and steps.")
         }
-        #endif
     }
 
     private var pdfSection: some View {
-        #if os(macOS)
-        VStack(alignment: .leading, spacing: 12) {
-            Text("PDF")
-                .font(.headline)
-            Text("A recipe card, a handout, or a page saved as a PDF.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            pdfButton
-        }
-        #else
         Section {
             pdfButton
         } header: {
@@ -180,7 +154,6 @@ struct ImportRecipeFromURLView: View {
         } footer: {
             Text("A recipe card, a handout, or a page saved as a PDF.")
         }
-        #endif
     }
 
     private var pdfButton: some View {
@@ -206,49 +179,16 @@ struct ImportRecipeFromURLView: View {
     }
 
     private func errorSection(_ error: String) -> some View {
-        #if os(macOS)
-        HStack {
-            Image(systemName: "exclamationmark.triangle")
-                .foregroundColor(.red)
-            Text(error)
-                .foregroundColor(.red)
-        }
-        #else
         Section {
             Label(error, systemImage: "exclamationmark.triangle")
                 .foregroundColor(.red)
         }
-        #endif
     }
 
     private func previewSection(_ parsed: RecipeURLImporter.ParsedRecipe) -> some View {
-        #if os(macOS)
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Preview")
-                .font(.headline)
-            if let previewImageData, let nsImage = NSImage(data: previewImageData) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 200)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-            }
-            LabeledContent("Title", value: parsed.title)
-            LabeledContent("Ingredients", value: "\(parsed.ingredients.count)")
-            LabeledContent("Steps", value: "\(parsed.directions.count)")
-            if parsed.prepDuration > 0 {
-                LabeledContent("Prep Time", value: formatDuration(parsed.prepDuration))
-            }
-            if parsed.cookDuration > 0 {
-                LabeledContent("Cook Time", value: formatDuration(parsed.cookDuration))
-            }
-        }
-        #else
         Section("Preview") {
-            if let previewImageData, let uiImage = UIImage(data: previewImageData) {
-                Image(uiImage: uiImage)
+            if let image = previewImage {
+                image
                     .resizable()
                     .scaledToFill()
                     .frame(maxWidth: .infinity)
@@ -267,6 +207,14 @@ struct ImportRecipeFromURLView: View {
                 LabeledContent("Cook Time", value: formatDuration(parsed.cookDuration))
             }
         }
+    }
+
+    private var previewImage: Image? {
+        guard let previewImageData else { return nil }
+        #if os(macOS)
+        return NSImage(data: previewImageData).map(Image.init(nsImage:))
+        #else
+        return UIImage(data: previewImageData).map(Image.init(uiImage:))
         #endif
     }
 
@@ -274,24 +222,6 @@ struct ImportRecipeFromURLView: View {
     private func ingredientsPreview(_ parsed: RecipeURLImporter.ParsedRecipe) -> some View {
         if !parsed.ingredients.isEmpty {
             let hasGroupNames = parsed.ingredientGroups.contains { !$0.name.isEmpty }
-            #if os(macOS)
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Ingredients")
-                    .font(.headline)
-                ForEach(Array(parsed.ingredientGroups.enumerated()), id: \.offset) { _, group in
-                    if hasGroupNames && !group.name.isEmpty {
-                        Text(group.name)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .padding(.top, 4)
-                    }
-                    ForEach(group.ingredients, id: \.self) { ingredient in
-                        Text(ingredient)
-                            .font(.subheadline)
-                    }
-                }
-            }
-            #else
             Section("Ingredients") {
                 ForEach(Array(parsed.ingredientGroups.enumerated()), id: \.offset) { _, group in
                     if hasGroupNames && !group.name.isEmpty {
@@ -305,27 +235,12 @@ struct ImportRecipeFromURLView: View {
                     }
                 }
             }
-            #endif
         }
     }
 
     @ViewBuilder
     private func directionsPreview(_ parsed: RecipeURLImporter.ParsedRecipe) -> some View {
         if !parsed.directions.isEmpty {
-            #if os(macOS)
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Directions")
-                    .font(.headline)
-                ForEach(Array(parsed.directions.enumerated()), id: \.offset) { index, step in
-                    HStack(alignment: .top, spacing: 8) {
-                        Text("\(index + 1).")
-                            .foregroundColor(.secondary)
-                        Text(step)
-                            .font(.subheadline)
-                    }
-                }
-            }
-            #else
             Section("Directions") {
                 ForEach(Array(parsed.directions.enumerated()), id: \.offset) { index, step in
                     HStack(alignment: .top, spacing: 8) {
@@ -336,21 +251,10 @@ struct ImportRecipeFromURLView: View {
                     }
                 }
             }
-            #endif
         }
     }
 
     private var saveSection: some View {
-        #if os(macOS)
-        HStack {
-            Spacer()
-            Button(action: saveRecipe) {
-                Label("Save Recipe", systemImage: "square.and.arrow.down")
-            }
-            .buttonStyle(.borderedProminent)
-            Spacer()
-        }
-        #else
         Section {
             Button(action: saveRecipe) {
                 Label("Save Recipe", systemImage: "square.and.arrow.down")
@@ -358,7 +262,6 @@ struct ImportRecipeFromURLView: View {
             }
             .font(.headline)
         }
-        #endif
     }
 
     // MARK: - Actions
