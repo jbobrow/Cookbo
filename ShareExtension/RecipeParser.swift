@@ -7,6 +7,7 @@ struct RecipeParser {
     enum ParseError: LocalizedError {
         case invalidURL
         case networkError(String)
+        case pageUnavailable(Int)
         case parsingFailed
 
         var errorDescription: String? {
@@ -15,6 +16,8 @@ struct RecipeParser {
                 return "The URL is not valid."
             case .networkError(let message):
                 return "Network error: \(message)"
+            case .pageUnavailable(let status):
+                return "The page couldn't be loaded: \(RecipeParserCore.describeStatus(status))."
             case .parsingFailed:
                 return "Could not find recipe data on this page."
             }
@@ -44,6 +47,11 @@ struct RecipeParser {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
             throw ParseError.networkError(error.localizedDescription)
+        }
+
+        // Instagram keeps its oEmbed fallback below, whatever the page answered
+        if let status = RecipeParserCore.errorStatus(of: response), !RecipeParserCore.isInstagramURL(urlString) {
+            throw ParseError.pageUnavailable(status)
         }
 
         // A link straight to a PDF, a recipe card or a printout

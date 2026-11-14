@@ -163,7 +163,15 @@ enum RecipePDFReader {
 
         /// Where the words start, past a number or bullet set apart from them.
         var bodyX: CGFloat {
-            if fragments.count > 1, isMarker(fragments[0].text) { return fragments[1].minX }
+            guard let first = fragments.first else { return 0 }
+            if fragments.count > 1, isMarker(first.text) { return fragments[1].minX }
+            // "1. Season the chicken…" in one run, as a browser prints a list:
+            // the words start about as many characters in as the number takes
+            if let marker = first.text.range(of: #"^(?:\d{1,2}[.)]|[•●▪◦‣·■□–—\-*])\s+"#, options: .regularExpression) {
+                let charWidth = (first.maxX - first.minX) / CGFloat(max(first.text.count, 1))
+                let markerLength = first.text.distance(from: first.text.startIndex, to: marker.upperBound)
+                return first.minX + charWidth * CGFloat(markerLength)
+            }
             return minX
         }
 
