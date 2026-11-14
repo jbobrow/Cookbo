@@ -101,4 +101,18 @@ final class RecipeParserTests: XCTestCase {
         XCTAssertEqual(RecipeParserCore.withoutSteps("Just Toast the bread. So good.", steps), "Just Toast the bread. So good.")
         XCTAssertEqual(RecipeParserCore.withoutSteps("Crisp. Toast the bread. Butter it.", steps), "Crisp.")
     }
+
+    func testAnErrorPageIsntARecipe() {
+        let url = URL(string: "https://example.com/recipe")!
+        func response(_ status: Int) -> URLResponse {
+            HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
+        }
+        XCTAssertEqual(RecipeParserCore.errorStatus(of: response(404)), 404)
+        XCTAssertEqual(RecipeParserCore.errorStatus(of: response(500)), 500)
+        XCTAssertNil(RecipeParserCore.errorStatus(of: response(200)))
+        XCTAssertNil(RecipeParserCore.errorStatus(of: URLResponse(url: url, mimeType: "text/html",
+                                                                  expectedContentLength: 0, textEncodingName: nil)),
+                     "not HTTP, nothing to judge")
+        XCTAssertEqual(RecipeParserCore.describeStatus(404), "not found (404)")
+    }
 }

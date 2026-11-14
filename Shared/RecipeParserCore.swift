@@ -113,6 +113,20 @@ struct RecipeParserCore {
         return nil
     }
 
+    /// The status code when a response is an error page rather than the page
+    /// asked for. A 404's <title> would otherwise import as a recipe called
+    /// "Not Found".
+    static func errorStatus(of response: URLResponse) -> Int? {
+        guard let status = (response as? HTTPURLResponse)?.statusCode,
+              !(200..<300).contains(status) else { return nil }
+        return status
+    }
+
+    /// "not found (404)", to finish "The page couldn't be loaded: …"
+    static func describeStatus(_ status: Int) -> String {
+        "\(HTTPURLResponse.localizedString(forStatusCode: status)) (\(status))"
+    }
+
     // MARK: - Instagram Detection & Parsing
 
     static func isInstagramURL(_ urlString: String) -> Bool {
